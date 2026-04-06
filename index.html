@@ -269,6 +269,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans
           <button class="btn" style="width:100%;margin-top:4px;justify-content:center;color:var(--danger);border-color:var(--danger);" onclick="clearManualFrames()" id="btnClearManual" disabled>🗑️ 清除手动帧</button>
         </div>
       </div>
+      <div class="panel-section" id="bgRemoveSection" style="display:none;">
+        <div class="panel-section-title">🧹 背景消除</div>
+        <div class="panel-section-body">
+          <div class="form-field">
+            <label>模式</label>
+            <select id="bgRemoveMode" onchange="onBgModeChange()" style="width:100%;padding:5px 8px;background:var(--bg-surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;outline:none;">
+              <option value="flood">🌊 边缘泛洪（自动）</option>
+              <option value="pick">🎯 取色消除（手动）</option>
+            </select>
+          </div>
+          <!-- Tolerance (for flood & pick) -->
+          <div id="bgTolField" class="form-field">
+            <label>容差 <span id="bgTolVal" style="float:right;color:var(--accent);font-weight:600;">32</span></label>
+            <input type="range" id="bgTolerance" min="0" max="128" value="32" style="width:100%;accent-color:var(--accent);" oninput="document.getElementById('bgTolVal').textContent=this.value">
+          </div>
+          <!-- Status hint -->
+          <div id="bgPickHint" style="display:none;font-size:11px;color:var(--accent);margin-bottom:6px;padding:4px 8px;background:rgba(137,180,250,0.08);border-radius:4px;">👆 点击图片上的背景色</div>
+          <!-- Action buttons -->
+          <div style="display:flex;gap:4px;">
+            <button class="btn btn-accent" style="flex:1;justify-content:center;" onclick="applyBgRemove()" id="btnBgApply" disabled>✅ 应用</button>
+            <button class="btn" style="flex:1;justify-content:center;" onclick="resetBgRemove()" id="btnBgReset" disabled>↺ 重置</button>
+          </div>
+          <button class="btn" style="width:100%;margin-top:6px;justify-content:center;" onclick="toggleBgRemoveMode()" id="btnBgMode" disabled>🎯 进入取色模式</button>
+        </div>
+      </div>
       <div class="panel-section">
         <div class="panel-section-title">统计</div>
         <div class="panel-section-body">
@@ -560,7 +585,8 @@ function handleFile(e) {
       document.getElementById('zoomBar').style.display = 'flex';
       document.getElementById('coord').style.display = 'block';
       document.getElementById('hintBar').style.display = 'block';
-      ['btnDetect','btnDetect2','btnOptimize','btnDelete','btnClearManual'].forEach(id => document.getElementById(id).disabled = false);
+      ['btnDetect','btnDetect2','btnOptimize','btnDelete','btnClearManual','btnBgMode'].forEach(id => document.getElementById(id).disabled = false);
+      document.getElementById('bgRemoveSection').style.display = '';
       document.getElementById('imgInfo').textContent = `${img.width}×${img.height} · ${f.name}`;
       renderCanvas(); zoomFit(); updateAll();
       toast('图片已加载');
@@ -642,6 +668,218 @@ function clearManualFrames() {
   selId = null;
   renderRects(); updateAll();
   toast(`已清除 ${manualCount} 个手动帧`);
+}
+
+// ===== Background Removal =====
+let bgRemoveActive = false;
+let bgOriginalData = null;
+let bgPickedColor = null;
+let bgPreviewData = null;
+
+function onBgModeChange() {
+  bgRemoveActive = false;
+  bgPickedColor = null;
+  document.getElementById('canvasFrame').style.cursor = '';
+  document.getElementById('bgPickHint').style.display = 'none';
+  const btn = document.getElementById('btnBgMode');
+  btn.textContent = '🎯 进入取色模式';
+  btn.style.borderColor = '';
+  document.getElementById('bgTolField').style.display = '';
+}
+
+function toggleBgRemoveMode() {
+  bgRemoveActive = !bgRemoveActive;
+  const btn = document.getElementById('btnBgMode');
+  const hint = document.getElementById('bgPickHint');
+  const mode = document.getElementById('bgRemoveMode').value;
+  if (mode === 'pick') {
+    if (bgRemoveActive) {
+      btn.textContent = '🚫 退出取色模式';
+      btn.style.borderColor = 'var(--accent)';
+      hint.style.display = 'block';
+      document.getElementById('canvasFrame').style.cursor = 'crosshair';
+    } else {
+      btn.textContent = '🎯 进入取色模式';
+      btn.style.borderColor = '';
+      hint.style.display = 'none';
+      document.getElementById('canvasFrame').style.cursor = '';
+    }
+  } else {
+    // Flood mode: just run directly
+    bgRemoveActive = false;
+    btn.textContent = '🎯 进入取色模式';
+    btn.style.borderColor = '';
+    hint.style.display = 'none';
+    document.getElementById('canvasFrame').style.cursor = '';
+    runBgFlood();
+  }
+}
+
+// Save original image data for reset
+function saveBgOriginal() {
+  if (!bgOriginalData && srcImg) {
+    const c = document.createElement('canvas');
+    c.width = srcImg.width; c.height = srcImg.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(srcImg, 0, 0);
+    bgOriginalData = ctx.getImageData(0, 0, srcImg.width, srcImg.height);
+  }
+}
+
+// Reset to original
+function resetBgRemove() {
+  if (!bgOriginalData || !srcImg) return;
+  const c = document.getElementById('mainCanvas');
+  const ctx = c.getContext('2d');
+  ctx.putImageData(bgOriginalData, 0, 0);
+  // Update srcImg from canvas
+  const dataUrl = c.toDataURL();
+  const img = new Image();
+  img.onload = () => {
+    srcImg = img;
+    bgOriginalData = null;
+    bgPreviewData = null;
+    bgPickedColor = null;
+    invalidateAlpha();
+    renderCanvas();
+    renderRects();
+    toast('已重置为原图');
+  };
+  img.src = dataUrl;
+}
+
+// Apply background removal permanently
+function applyBgRemove() {
+  if (!srcImg) return;
+  // The preview is already on canvas, just update srcImg
+  const c = document.getElementById('mainCanvas');
+  const dataUrl = c.toDataURL();
+  const img = new Image();
+  img.onload = () => {
+    srcImg = img;
+    bgOriginalData = null;
+    bgPreviewData = null;
+    bgPickedColor = null;
+    invalidateAlpha();
+    renderRects();
+    toast('背景消除已应用');
+  };
+  img.src = dataUrl;
+}
+
+// Pick color from canvas at click position
+function bgPickColor(e) {
+  if (!bgRemoveActive || !srcImg) return;
+  const mode = document.getElementById('bgRemoveMode').value;
+  if (mode !== 'pick') return;
+
+  const c = document.getElementById('mainCanvas');
+  const ctx = c.getContext('2d');
+  const coords = imgCoords(e);
+  const pixel = ctx.getImageData(coords.x, coords.y, 1, 1).data;
+  bgPickedColor = { r: pixel[0], g: pixel[1], b: pixel[2] };
+
+  // Save original if not saved
+  saveBgOriginal();
+
+  // Run pick-color removal
+  runBgPickRemove();
+
+  // Show picked color
+  const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+  document.getElementById('bgPickHint').textContent = `👆 已取色 ${hex}，再次点击可重新取色`;
+  document.getElementById('btnBgApply').disabled = false;
+  document.getElementById('btnBgReset').disabled = false;
+}
+
+// Color distance for tolerance matching
+function colorDist(r1, g1, b1, r2, g2, b2) {
+  return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+}
+
+// Pick-color removal: make similar colors transparent
+function runBgPickRemove() {
+  if (!bgPickedColor || !srcImg) return;
+  saveBgOriginal();
+
+  const c = document.getElementById('mainCanvas');
+  const ctx = c.getContext('2d');
+  const imgData = ctx.getImageData(0, 0, srcImg.width, srcImg.height);
+  const d = imgData.data;
+  const tol = parseInt(document.getElementById('bgTolerance').value) || 32;
+  const { r: pr, g: pg, b: pb } = bgPickedColor;
+
+  for (let i = 0; i < d.length; i += 4) {
+    if (colorDist(d[i], d[i + 1], d[i + 2], pr, pg, pb) <= tol) {
+      d[i + 3] = 0; // Set alpha to 0
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  bgPreviewData = true;
+}
+
+// Flood fill from edges: BFS from all border pixels
+function runBgFlood() {
+  if (!srcImg) return;
+  saveBgOriginal();
+
+  const c = document.getElementById('mainCanvas');
+  const ctx = c.getContext('2d');
+  const imgData = ctx.getImageData(0, 0, srcImg.width, srcImg.height);
+  const d = imgData.data;
+  const w = srcImg.width, h = srcImg.height;
+  const tol = parseInt(document.getElementById('bgTolerance').value) || 32;
+
+  // Visited array
+  const visited = new Uint8Array(w * h);
+
+  // BFS queue: start from all border pixels
+  const queue = [];
+  // Add all border pixels that are not fully transparent
+  for (let x = 0; x < w; x++) {
+    queue.push(x); // top row
+    queue.push((h - 1) * w + x); // bottom row
+  }
+  for (let y = 0; y < h; y++) {
+    queue.push(y * w); // left col
+    queue.push(y * w + w - 1); // right col
+  }
+
+  // Get reference color from top-left corner (or first non-transparent border pixel)
+  let refR = 0, refG = 0, refB = 0;
+  for (let i = 0; i < queue.length; i++) {
+    const idx = queue[i] * 4;
+    if (d[idx + 3] > 128) { refR = d[idx]; refG = d[idx + 1]; refB = d[idx + 2]; break; }
+  }
+
+  // BFS
+  let head = 0;
+  while (head < queue.length) {
+    const pos = queue[head++];
+    if (visited[pos]) continue;
+    visited[pos] = 1;
+
+    const idx = pos * 4;
+    // Check if this pixel matches reference color within tolerance
+    if (d[idx + 3] > 128 && colorDist(d[idx], d[idx + 1], d[idx + 2], refR, refG, refB) <= tol) {
+      // Mark as background (transparent)
+      d[idx + 3] = 0;
+
+      // Add neighbors
+      const x = pos % w, y = (pos - x) / w;
+      if (x > 0) queue.push(pos - 1);
+      if (x < w - 1) queue.push(pos + 1);
+      if (y > 0) queue.push(pos - w);
+      if (y < h - 1) queue.push(pos + w);
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  bgPreviewData = true;
+  document.getElementById('btnBgApply').disabled = false;
+  document.getElementById('btnBgReset').disabled = false;
+  toast('泛洪消除完成，预览效果中');
 }
 
 // Apply size constraint to a drawn rectangle, returns {x, y, w, h}
@@ -796,6 +1034,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   frame.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
+    // Pick-color mode for background removal
+    if (bgRemoveActive) { bgPickColor(e); return; }
     // Clicking on empty canvas area → start drawing
     if (e.target === frame || e.target.id === 'mainCanvas') {
       const c = imgCoords(e);
