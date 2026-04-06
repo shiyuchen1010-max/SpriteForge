@@ -1275,10 +1275,13 @@ function onAnchorInput1() {
 
 // Long-press nudge for Step 1 anchor coordinates
 let _nudgeTimer = null;
+let _nudgeActive = false;
 function startNudge(inputId, dir, e) {
   e.preventDefault();
+  if (_nudgeActive) return; // Already nudging, let the timer chain handle it
+  _nudgeActive = true;
   const el = document.getElementById(inputId);
-  if (!el) return;
+  if (!el) { _nudgeActive = false; return; }
   // Immediate first step
   el.value = Math.max(0, (parseInt(el.value) || 0) + dir);
   onAnchorInput1();
@@ -1289,13 +1292,15 @@ function startNudge(inputId, dir, e) {
     _nudgeTimer = setTimeout(repeat, 80);
   }, 300);
 }
-function stopNudge() { clearTimeout(_nudgeTimer); _nudgeTimer = null; }
+function stopNudge() { clearTimeout(_nudgeTimer); _nudgeTimer = null; _nudgeActive = false; }
 
 // Long-press nudge for Step 2 anchor coordinates
 function startNudge2(inputId, dir, e) {
   e.preventDefault();
+  if (_nudgeActive) return;
+  _nudgeActive = true;
   const el = document.getElementById(inputId);
-  if (!el) return;
+  if (!el) { _nudgeActive = false; return; }
   el.value = Math.max(0, (parseInt(el.value) || 0) + dir);
   onAnchorInput2();
   _nudgeTimer = setTimeout(function repeat() {
