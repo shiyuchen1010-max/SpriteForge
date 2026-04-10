@@ -617,17 +617,32 @@ function closeImage(id) {
     document.getElementById('lockHChk').checked = false;
     document.getElementById('lockFixedChk').checked = false;
     onLockCheckChange();
+    // Reset canvas UI
     document.getElementById('emptyState').style.display = '';
-    document.getElementById('canvasArea').style.display = 'none';
+    document.getElementById('canvasFrame').style.display = 'none';
+    document.getElementById('canvasArea').style.display = '';
     document.getElementById('zoomBar').style.display = 'none';
     document.getElementById('coord').style.display = 'none';
     document.getElementById('hintBar').style.display = 'none';
+    // Reset right panel
+    ['btnDetect','btnDetect2','btnOptimize','btnDelete','btnClearManual','btnBgMode'].forEach(id => document.getElementById(id).disabled = true);
+    document.getElementById('bgRemoveSection').style.display = 'none';
+    document.getElementById('imgInfo').textContent = '';
+    document.getElementById('frameRects').innerHTML = '';
+    document.getElementById('frameList').innerHTML = '';
+    document.getElementById('listHint').textContent = '';
+    document.getElementById('sTotal').textContent = '0';
+    document.getElementById('sSel').textContent = '0';
+    document.getElementById('sManual').textContent = '0';
+    document.getElementById('detailArea').innerHTML = '<div class="empty" style="padding:16px;"><p style="font-size:11px;">选中帧查看详情</p></div>';
+    const previewArea = document.getElementById('previewArea');
+    previewArea.innerHTML = '<div class="empty" style="padding:16px;"><p style="font-size:11px;">点击帧查看</p></div>';
     renderImageTabs();
     return;
   }
   if (id === currentImageId) {
     // Switch to another image without saving (already deleted)
-    currentImageId = null; // Prevent saveCurrentImage from saving deleted entry
+    currentImageId = null;
     const newId = ids[ids.length - 1];
     const data = imageStore[newId];
     currentImageId = newId;
@@ -648,8 +663,14 @@ function closeImage(id) {
     if (lockedTop > 0) document.getElementById('lockTopChk').checked = true;
     if (lockedHeight > 0) { document.getElementById('lockHChk').checked = true; document.getElementById('lockHInput').value = lockedHeight; }
     onLockCheckChange();
-    document.getElementById('zoomVal').textContent = zoom + 'x';
+    // Update canvas UI
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('canvasFrame').style.display = 'inline-block';
+    document.getElementById('zoomBar').style.display = 'flex';
+    document.getElementById('coord').style.display = 'block';
+    document.getElementById('hintBar').style.display = 'block';
     document.getElementById('imgInfo').textContent = `${srcImg.width}×${srcImg.height}`;
+    document.getElementById('zoomVal').textContent = zoom + 'x';
     renderCanvas(); renderRects(); updateAll();
   }
   renderImageTabs();
