@@ -6,6 +6,14 @@
 </p>
 
 <p align="center">
+  <strong>调整前 ❌</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>调整后 ✅</strong>
+</p>
+
+<p align="center">
+  <img src="assets/before.gif" alt="调整前" width="380">&nbsp;&nbsp;<img src="assets/after.gif" alt="调整后" width="380">
+</p>
+
+<p align="center">
   <img src="assets/screenshot_1.png" alt="SpriteForge 主界面" width="800">
 </p>
 
