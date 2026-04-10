@@ -6,16 +6,51 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot_main.jpg" alt="SpriteForge 主界面" width="800">
+  <img src="assets/screenshot_1.png" alt="SpriteForge 主界面" width="800">
+</p>
+
+---
+
+## 🎮 使用流程
+
+### 第一步：加载图片
+点击「加载图片」按钮，选择需要处理的精灵表文件。
+
+<p align="center">
+  <img src="assets/screenshot_1.png" alt="加载图片" width="800">
+</p>
+
+### 第二步：框选帧区域
+勾选需要的约束选项（锁定顶部/底部/高度等），在精灵表上拖拽框选每一帧。第一帧会自动设定参考线，后续帧自动对齐。
+
+<p align="center">
+  <img src="assets/screenshot_2.png" alt="框选帧" width="800">
+</p>
+
+### 第三步：帧对齐与优化
+框选完成后，点击「帧对齐与导出」进入锚点调整窗口，设置锚点位置，点击「分析并优化」自动对齐所有帧。
+
+<p align="center">
+  <img src="assets/screenshot_3.png" alt="帧对齐" width="800">
+</p>
+
+### 第四步：调整锚点
+在锚点调整窗口中，可以逐帧微调锚点位置，预览动画效果，确保对齐准确。
+
+<p align="center">
+  <img src="assets/screenshot_4.png" alt="调整锚点" width="800">
+</p>
+
+### 第五步：预览并导出
+确认动画效果后，点击「应用并导出」生成最终的精灵表文件。
+
+<p align="center">
+  <img src="assets/screenshot_5.png" alt="导出" width="800">
 </p>
 
 ---
 
 ## ✨ 功能特性
-
-<p align="center">
-  <img src="assets/screenshot_features.jpg" alt="功能展示" width="700">
-</p>
 
 ### 🎯 帧检测与管理
 - **自动检测** — 智能识别精灵表中的独立帧
@@ -70,14 +105,6 @@ python3 -m http.server 8080
 ```
 
 ---
-
-## 🎮 使用流程
-
-```
-1. 加载图片 → 2. 自动/手动检测帧 → 3. 调整帧区域
-     ↓
-4. （可选）背景消除 → 5. （可选）帧优化对齐 → 6. 导出精灵表
-```
 
 ### 快捷键
 | 操作 | 快捷键 |
