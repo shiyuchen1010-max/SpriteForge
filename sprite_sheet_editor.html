@@ -225,7 +225,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans
     <div class="sep"></div>
     <button class="btn" onclick="showOptimizeModal()" id="btnOptimize" disabled>🎯 帧对齐与导出</button>
     <div class="sep"></div>
-    <button class="btn" onclick="showInterpModal()" id="btnInterp" disabled>🎞️ 插帧</button>
+    <button class="btn" onclick="undo()" id="btnUndo" disabled title="撤回上一步操作">↩ 撤回</button>
+    <button class="btn" onclick="duplicateMiddleFrames()" id="btnInterp" disabled>🎞️ 复制中间帧</button>
+    <button class="btn" onclick="showCompareModal()" id="btnCompareToolbar" title="插帧前后对比" style="display:none;" disabled>⇔ 对比</button>
     <div class="sep"></div>
     <button class="btn" onclick="showExportModal('sheets')">📦 导出精灵表</button>
     <button class="btn" onclick="showExportModal('frames')">🖼️ 导出单帧</button>
@@ -353,6 +355,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans
             <button class="btn btn-icon" onclick="toggleAnim()" id="btnAnim">▶</button>
             <input type="range" id="fpsRange" min="1" max="30" value="8" oninput="updateFps()">
             <span id="fpsVal">8fps</span>
+            <button class="btn btn-icon" onclick="showCompareModal()" id="btnCompare" title="插帧前后对比" style="display:none;" disabled>⇔</button>
           </div>
         </div>
       </div>
@@ -481,35 +484,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans
       <div class="modal-actions" id="optStep2Actions" style="position:sticky;bottom:0;background:var(--bg-panel);padding:12px 0 0;margin-top:8px;z-index:1;">
         <button class="btn" onclick="backToOptStep1()">← 返回调整</button>
         <button class="btn btn-danger" onclick="discardOptimize()">放弃</button>
-        <button class="btn" onclick="toggleOptInterpPanel()" id="btnOptInterp" title="在优化后的帧之间插入中间帧">🎞️ 插帧</button>
+        <button class="btn" onclick="duplicateOptMiddleFrames()" id="btnOptInterp" title="在每对相邻帧之间复制中间帧">🎞️ 复制中间帧</button>
+        <button class="btn" onclick="undoOptDup()" id="btnOptDupUndo" style="display:none;" title="撤回复制">↩ 撤回</button>
+        <button class="btn" onclick="showOptCompareModal()" id="btnOptCompare" style="display:none;" title="复制前后对比">⇔ 对比</button>
         <button class="btn btn-accent" onclick="applyAndExport()">✅ 应用并导出</button>
-      </div>
-      <!-- Interpolation panel (hidden by default) -->
-      <div id="optInterpPanel" style="display:none;margin-top:10px;padding:10px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);">
-        <div style="font-size:12px;font-weight:600;margin-bottom:8px;">🎞️ 帧插值</div>
-        <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
-          <label style="font-size:11px;white-space:nowrap;">倍率</label>
-          <select id="optInterpFactor" style="font-size:11px;padding:3px 6px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:4px;">
-            <option value="2">2x</option>
-            <option value="3">3x</option>
-          </select>
-          <label style="font-size:11px;white-space:nowrap;">块大小</label>
-          <select id="optInterpBS" style="font-size:11px;padding:3px 6px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:4px;">
-            <option value="4">4（精细）</option>
-            <option value="8" selected>8（推荐）</option>
-          </select>
-          <span style="font-size:11px;color:var(--text-dim);" id="optInterpInfo"></span>
-        </div>
-        <div id="optInterpProgress" style="display:none;margin-bottom:8px;">
-          <div style="height:4px;background:var(--bg-panel);border-radius:2px;overflow:hidden;">
-            <div id="optInterpBar" style="height:100%;width:0%;background:var(--accent);border-radius:2px;transition:width 0.1s;"></div>
-          </div>
-          <div style="font-size:10px;color:var(--text-dim);margin-top:2px;" id="optInterpLabel"></div>
-        </div>
-        <div style="display:flex;gap:6px;">
-          <button class="btn btn-accent" onclick="runOptInterpolation()" id="btnOptInterpRun" style="font-size:11px;">开始插帧</button>
-          <button class="btn" onclick="resetOptInterpolation()" id="btnOptInterpReset" style="font-size:11px;display:none;">↺ 撤销插帧</button>
-        </div>
       </div>
     </div>
 
@@ -550,46 +528,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans
 </div>
 
 <!-- Interpolation Modal -->
-<div class="modal-bg" id="interpModal">
-  <div class="modal" style="max-width:520px;">
-    <h2>🎞️ 帧插值</h2>
-    <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">在相邻帧之间自动生成中间帧，让动画更流畅</p>
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <div style="display:flex;gap:12px;align-items:center;">
-        <label style="font-size:12px;white-space:nowrap;">插帧倍率</label>
-        <select id="interpFactor" style="flex:1;font-size:12px;padding:4px 6px;background:var(--bg-surface);border:1px solid var(--border);color:var(--text);border-radius:4px;">
-          <option value="2">2x（每2帧→3帧）</option>
-          <option value="3">3x（每2帧→4帧）</option>
-          <option value="4">4x（每2帧→5帧）</option>
-        </select>
+<!-- Duplicate Middle Frames (replaces old interpolation modal) -->
+
+<!-- Compare Modal (插帧前后对比) -->
+<div class="modal-bg" id="compareModal">
+  <div class="modal" style="max-width:680px;">
+    <h2>⇔ 插帧前后对比</h2>
+    <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">左侧为原始动画，右侧为复制中间帧后的动画</p>
+    <div style="display:flex;gap:16px;justify-content:center;align-items:flex-start;">
+      <div style="text-align:center;">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">原始（<span id="compareBeforeCount">0</span> 帧）</div>
+        <canvas id="compareBeforeCvs" width="200" height="120" style="border:1px solid var(--border);border-radius:4px;background:repeating-conic-gradient(var(--bg-surface) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;image-rendering:pixelated;"></canvas>
       </div>
-      <div style="display:flex;gap:12px;align-items:center;">
-        <label style="font-size:12px;white-space:nowrap;">搜索半径</label>
-        <input type="range" id="interpSearch" min="4" max="32" value="16" style="flex:1;" oninput="document.getElementById('interpSearchVal').textContent=this.value">
-        <span id="interpSearchVal" style="font-size:11px;color:var(--text-dim);width:24px;">16</span>
-      </div>
-      <div style="display:flex;gap:12px;align-items:center;">
-        <label style="font-size:12px;white-space:nowrap;">块大小</label>
-        <select id="interpBlockSize" style="flex:1;font-size:12px;padding:4px 6px;background:var(--bg-surface);border:1px solid var(--border);color:var(--text);border-radius:4px;">
-          <option value="4">4（精细，慢）</option>
-          <option value="8" selected>8（推荐）</option>
-          <option value="16">16（快速，粗糙）</option>
-        </select>
-      </div>
-      <div id="interpProgress" style="display:none;">
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;" id="interpProgressLabel">处理中...</div>
-        <div style="height:6px;background:var(--bg-surface);border-radius:3px;overflow:hidden;">
-          <div id="interpProgressBar" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.1s;"></div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <span style="font-size:11px;color:var(--text-dim);">当前帧数: <strong id="interpFrameCount">0</strong></span>
-        <span style="font-size:11px;color:var(--text-dim);">→ 插帧后: <strong id="interpResultCount">0</strong></span>
+      <div style="text-align:center;">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">复制后（<span id="compareAfterCount">0</span> 帧）</div>
+        <canvas id="compareAfterCvs" width="200" height="120" style="border:1px solid var(--border);border-radius:4px;background:repeating-conic-gradient(var(--bg-surface) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;image-rendering:pixelated;"></canvas>
       </div>
     </div>
+    <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:8px;">
+      <button class="btn" onclick="toggleCompareAnim()" id="btnComparePlay">▶ 播放对比</button>
+      <input type="range" id="compareFpsRange" min="1" max="30" value="8" style="width:100px;" oninput="updateCompareFps()">
+      <span style="font-size:10px;color:var(--text-dim);line-height:28px;" id="compareFpsInfo">8fps</span>
+    </div>
     <div class="modal-actions">
-      <button class="btn" onclick="closeModal('interpModal')">取消</button>
-      <button class="btn btn-accent" id="btnInterpStart" onclick="runInterpolation()">开始插帧</button>
+      <button class="btn" onclick="closeCompareModal()">关闭</button>
     </div>
   </div>
 </div>
@@ -775,6 +737,10 @@ function addImageToStore(name, img) {
   renderImageTabs();
 }
 let animPlaying = false, animIdx = 0, animTimer = null;
+let preDupSrcImg = null; // snapshot of srcImg before duplication
+let preDupFrames = null; // snapshot of frames before duplication
+let undoStack = []; // stack of {srcImg, frames} for undo
+const MAX_UNDO = 5;
 let exportMode = '', ctxFrameId = null;
 
 // Interaction state (no mode switching!)
@@ -2426,7 +2392,7 @@ function applyOptimize() {
     }
   }
   if (newFrames.length) frames.push(...newFrames);
-  optBackup = null; optPreviewData = null; optTrimmedData = null; optInterpBackup = null;
+  optBackup = null; optPreviewData = null; optTrimmedData = null; optDupBackup = null; optDupBackupSrcImg = null;
   stopOptAnim();
   renderRects(); updateAll();
   toast('✅ 优化已应用');
@@ -2437,7 +2403,8 @@ function applyAndExport() {
   if (!optPreviewData || !optBackup) { toast('没有可应用的优化'); return; }
   const newFrames = [];
   for (const d of optPreviewData) {
-    if (d._isInterp) {
+    if (d._isInterp && d._interpImgData) {
+      // Only treat as special interp frame if it has actual ImageData
       const uw = d.unifiedW, uh = d.unifiedH;
       const tmpCvs = document.createElement('canvas');
       tmpCvs.width = uw; tmpCvs.height = uh;
@@ -2448,6 +2415,7 @@ function applyAndExport() {
         unifiedW: uw, unifiedH: uh, offsetX: 0, offsetY: 0
       });
     } else {
+      // Normal frame or duplicated frame (no _interpImgData)
       const f = frames.find(fr => fr.id === d.id);
       if (f) {
         f.x = d.srcX; f.y = d.srcY; f.w = d.srcW; f.h = d.srcH;
@@ -2455,11 +2423,20 @@ function applyAndExport() {
         f.unifiedH = d.unifiedH;
         f.offsetX = d.offsetX;
         f.offsetY = d.offsetY;
+      } else if (d._isInterp) {
+        // Duplicated frame: create from source image using same src coords
+        newFrames.push({
+          id: nextId++,
+          x: d.srcX, y: d.srcY, w: d.srcW, h: d.srcH,
+          manual: true,
+          unifiedW: d.unifiedW, unifiedH: d.unifiedH,
+          offsetX: d.offsetX, offsetY: d.offsetY
+        });
       }
     }
   }
   if (newFrames.length) frames.push(...newFrames);
-  optBackup = null; optPreviewData = null; optTrimmedData = null; optInterpBackup = null;
+  optBackup = null; optPreviewData = null; optTrimmedData = null; optDupBackup = null; optDupBackupSrcImg = null;
   stopOptAnim();
   renderRects(); updateAll();
 
@@ -2792,7 +2769,7 @@ function updateList() {
       html += `<div class="frame-item ${f.id===selId?'active':''} ${!f.selected?'excluded':''}" onclick="selectFrame(${f.id})" oncontextmenu="event.preventDefault();showCtx(event,${f.id})">
         <input type="checkbox" ${f.selected?'checked':''} onclick="event.stopPropagation();toggleFrame(${f.id})">
         <canvas width="28" height="28" data-fid="${f.id}"></canvas>
-        <div class="info"><div class="name">${f.w}×${f.h}${f.manual?'<span class=tag>手动</span>':''}</div><div class="meta">(${f.x},${f.y})</div></div>
+        <div class="info"><div class="name">${f.w}×${f.h}${f._isInterp?'<span class="tag" style="background:var(--mauve);">插帧</span>':f.manual?'<span class=tag>手动</span>':''}</div><div class="meta">(${f.x},${f.y})</div></div>
         <div class="sort-btns" onclick="event.stopPropagation()">
           <button class="sort-btn" onclick="moveFrame(${f.id},-1)" title="上移" ${idx<=0?'disabled':''}>▲</button>
           <button class="sort-btn" onclick="moveFrame(${f.id},1)" title="下移" ${idx>=frames.length-1?'disabled':''}>▼</button>
@@ -2814,6 +2791,12 @@ function updateList() {
       c.getContext('2d').drawImage(tc, f.x, f.y, f.w, f.h, 0, 0, c.width, c.height);
     });
   }
+
+  // Auto-scroll to show newly added frames (if frames increased)
+  if (typeof updateList._prevCount === 'number' && frames.length > updateList._prevCount) {
+    box.scrollTop = box.scrollHeight;
+  }
+  updateList._prevCount = frames.length;
 }
 function toggleGroup(k) {
   const gfs = frames.filter(f => (f.manual?'m':'a')+f.row === k);
@@ -2892,6 +2875,8 @@ function toggleAnim() {
 function playAnim() {
   stopAnim();
   let sf = frames.filter(f => f.selected); if (!sf.length) sf = [...frames]; if (!sf.length) return;
+  // If only 1 frame selected, play all frames instead
+  if (sf.length === 1) sf = [...frames];
   const fps = parseInt(document.getElementById('fpsRange').value) || 8;
   const c = document.getElementById('animCanvas'), ctx = c.getContext('2d');
 
@@ -3199,241 +3184,114 @@ document.body.addEventListener('drop', e => {
 });
 
 // ============================================================================
-//  Frame Interpolation (帧插值)
+//  Optimize Panel — Duplicate Middle Frames (优化面板复制中间帧)
 // ============================================================================
 
-// ---- Utility functions ----
-function _fiCreateImageData(w, h) { return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }; }
-function _fiGetPixel(img, x, y) {
-  if (x < 0 || x >= img.width || y < 0 || y >= img.height) return [0,0,0,0];
-  const i = (y * img.width + x) * 4;
-  return [img.data[i], img.data[i+1], img.data[i+2], img.data[i+3]];
-}
-function _fiSetPixel(img, x, y, r, g, b, a) {
-  if (x < 0 || x >= img.width || y < 0 || y >= img.height) return;
-  const i = (y * img.width + x) * 4;
-  img.data[i]=r; img.data[i+1]=g; img.data[i+2]=b; img.data[i+3]=a;
-}
-function _fiBilinear(img, fx, fy) {
-  const x0=Math.floor(fx), y0=Math.floor(fy), dx=fx-x0, dy=fy-y0;
-  const p00=_fiGetPixel(img,x0,y0), p10=_fiGetPixel(img,x0+1,y0);
-  const p01=_fiGetPixel(img,x0,y0+1), p11=_fiGetPixel(img,x0+1,y0+1);
-  const w00=(1-dx)*(1-dy), w10=dx*(1-dy), w01=(1-dx)*dy, w11=dx*dy;
-  return [p00[0]*w00+p10[0]*w10+p01[0]*w01+p11[0]*w11,
-          p00[1]*w00+p10[1]*w10+p01[1]*w01+p11[1]*w11,
-          p00[2]*w00+p10[2]*w10+p01[2]*w01+p11[2]*w11,
-          p00[3]*w00+p10[3]*w10+p01[3]*w01+p11[3]*w11];
-}
-function _fiComputeSAD(img, bx, by, ref, rx, ry, bs) {
-  let sad=0;
-  for (let dy=0;dy<bs;dy++) for (let dx=0;dx<bs;dx++) {
-    const p=_fiGetPixel(img,bx+dx,by+dy), q=_fiGetPixel(ref,rx+dx,ry+dy);
-    sad+=Math.abs(p[0]-q[0])+Math.abs(p[1]-q[1])+Math.abs(p[2]-q[2]);
-  }
-  return sad;
-}
-function _fiBuildMotionField(fA, fB, bs, sr) {
-  const w=fA.width, h=fA.height, bX=Math.ceil(w/bs), bY=Math.ceil(h/bs);
-  const mv=new Float32Array(bX*bY*2);
-  for (let by=0;by<bY;by++) for (let bx=0;bx<bX;bx++) {
-    const ox=bx*bs, oy=by*bs;
-    let bestDx=0, bestDy=0, bestSAD=Infinity;
-    for (let dy=-sr;dy<=sr;dy++) for (let dx=-sr;dx<=sr;dx++) {
-      const sad=_fiComputeSAD(fA,ox,oy,fB,ox+dx,oy+dy,bs);
-      if (sad<bestSAD) { bestSAD=sad; bestDx=dx; bestDy=dy; }
-    }
-    const idx=(by*bX+bx)*2; mv[idx]=bestDx; mv[idx+1]=bestDy;
-  }
-  return mv;
-}
-function _fiWarp(src, mv, bs, t, forward) {
-  const w=src.width, h=src.height, bX=Math.ceil(w/bs);
-  const out=_fiCreateImageData(w,h), wr=new Uint8Array(w*h);
-  for (let by=0;by<Math.ceil(h/bs);by++) for (let bx=0;bx<bX;bx++) {
-    const mi=(by*bX+bx)*2, scale=forward?t:-(1-t);
-    for (let dy=0;dy<bs;dy++) for (let dx=0;dx<bs;dx++) {
-      const sx=bx*bs+dx, sy=by*bs+dy;
-      if (sx>=w||sy>=h) continue;
-      const tx=sx+mv[mi]*scale, ty=sy+mv[mi+1]*scale;
-      const rx=Math.round(tx), ry=Math.round(ty);
-      if (rx<0||rx>=w||ry<0||ry>=h) continue;
-      const c=_fiBilinear(src,tx,ty), di=(ry*w+rx)*4;
-      out.data[di]=c[0]; out.data[di+1]=c[1]; out.data[di+2]=c[2]; out.data[di+3]=c[3];
-      wr[ry*w+rx]=1;
-    }
-  }
-  return {image:out, written:wr};
-}
-function _fiFillHoles(img, wr) {
-  const w=img.width, h=img.height, r=_fiCreateImageData(w,h);
-  r.data.set(img.data); const nw=new Uint8Array(wr);
-  for (let iter=0;iter<3;iter++) {
-    let filled=0;
-    for (let y=0;y<h;y++) for (let x=0;x<w;x++) {
-      if (nw[y*w+x]) continue;
-      let sR=0,sG=0,sB=0,sA=0,cnt=0;
-      for (const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]) {
-        if (nx>=0&&nx<w&&ny>=0&&ny<h&&nw[ny*w+nx]) {
-          const p=_fiGetPixel(r,nx,ny); sR+=p[0];sG+=p[1];sB+=p[2];sA+=p[3];cnt++;
-        }
-      }
-      if (cnt>0) { _fiSetPixel(r,x,y,sR/cnt,sG/cnt,sB/cnt,sA/cnt); nw[y*w+x]=1; filled++; }
-    }
-    if (!filled) break;
-  }
-  return r;
-}
-function _fiInterpolatePair(fA, fB, t, bs) {
-  const sr = Math.max(Math.ceil(bs * 2), Math.ceil(Math.max(fA.width, fA.height) * 0.25));
-  const mvF=_fiBuildMotionField(fA,fB,bs,sr);
-  const mvB=_fiBuildMotionField(fB,fA,bs,sr);
-  const fwd=_fiWarp(fA,mvF,bs,t,true), bwd=_fiWarp(fB,mvB,bs,t,false);
-  const w=fA.width, h=fA.height, bX=Math.ceil(w/bs), out=_fiCreateImageData(w,h), ow=new Uint8Array(w*h);
-  const OCCL=60;
-  for (let y=0;y<h;y++) for (let x=0;x<w;x++) {
-    const pi=y*w+x, fc=_fiGetPixel(fwd.image,x,y), bc=_fiGetPixel(bwd.image,x,y);
-    const diff=Math.abs(fc[0]-bc[0])+Math.abs(fc[1]-bc[1])+Math.abs(fc[2]-bc[2]);
-    if (fwd.written[pi]&&bwd.written[pi]&&diff<OCCL) {
-      _fiSetPixel(out,x,y,(fc[0]+bc[0])/2,(fc[1]+bc[1])/2,(fc[2]+bc[2])/2,(fc[3]+bc[3])/2); ow[pi]=1;
-    } else if (fwd.written[pi]&&bwd.written[pi]) {
-      const bxi=Math.floor(x/bs), byi=Math.floor(y/bs), mi=(byi*bX+bxi)*2;
-      const fM=Math.sqrt(mvF[mi]**2+mvF[mi+1]**2), bM=Math.sqrt(mvB[mi]**2+mvB[mi+1]**2);
-      const c=fM<=bM?fc:bc; _fiSetPixel(out,x,y,c[0],c[1],c[2],c[3]); ow[pi]=1;
-    } else if (fwd.written[pi]) { _fiSetPixel(out,x,y,fc[0],fc[1],fc[2],fc[3]); ow[pi]=1; }
-    else if (bwd.written[pi]) { _fiSetPixel(out,x,y,bc[0],bc[1],bc[2],bc[3]); ow[pi]=1; }
-  }
-  return _fiFillHoles(out, ow);
-}
+let optDupBackup = null; // backup of optPreviewData before duplication
+let optDupBackupSrcImg = null; // backup of srcImg for compare
 
-// ============================================================================
-//  Optimize Panel Interpolation (优化面板内的插帧)
-// ============================================================================
+function duplicateOptMiddleFrames() {
+  if (!optPreviewData || optPreviewData.length < 2) { toast('至少需要 2 帧才能复制中间帧'); return; }
 
-let optInterpBackup = null; // backup of optPreviewData before interpolation
-
-function toggleOptInterpPanel() {
-  const panel = document.getElementById('optInterpPanel');
-  const visible = panel.style.display !== 'none';
-  panel.style.display = visible ? 'none' : '';
-  if (!visible && optPreviewData) {
-    document.getElementById('optInterpInfo').textContent = `${optPreviewData.length} 帧`;
-  }
-}
-
-async function runOptInterpolation() {
-  if (!optPreviewData || !srcImg) { toast('没有可用的帧数据'); return;
-  }
-  // Filter out any invalid frames
-  const validFrames = optPreviewData.filter(d => !d._isInterp && d.srcW > 0 && d.srcH > 0);
-  if (validFrames.length < 2) { toast('至少需要 2 个有效帧才能插帧'); return; }
-
-  const factor = parseInt(document.getElementById('optInterpFactor').value);
-  const blockSize = parseInt(document.getElementById('optInterpBS').value);
-
-  // Backup current optPreviewData
-  if (!optInterpBackup) optInterpBackup = optPreviewData.map(d => ({...d}));
-
-  document.getElementById('btnOptInterpRun').disabled = true;
-  document.getElementById('optInterpProgress').style.display = '';
-  const bar = document.getElementById('optInterpBar');
-  const label = document.getElementById('optInterpLabel');
-  const startTime = Date.now();
-
-  // Build frame images: use the actual trimmed frame content, not the full unified canvas
-  // This makes block matching much faster and more accurate
-  const frameImgs = validFrames.map(d => {
-    const tmpCvs = document.createElement('canvas');
-    tmpCvs.width = d.srcW;
-    tmpCvs.height = d.srcH;
-    const tmpCtx = tmpCvs.getContext('2d');
-    tmpCtx.imageSmoothingEnabled = false;
-    tmpCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, 0, 0, d.srcW, d.srcH);
-    return { imgData: tmpCtx.getImageData(0, 0, d.srcW, d.srcH), w: d.srcW, h: d.srcH, origData: d };
-  });
-
-  const totalPairs = frameImgs.length - 1;
-  const perPair = factor - 1;
-  const total = totalPairs * perPair;
-  let done = 0;
-  const newFrames = [];
-
-  for (let i = 0; i < totalPairs; i++) {
-    for (let j = 1; j <= perPair; j++) {
-      const t = j / factor;
-      const elapsed = ((Date.now()-startTime)/1000).toFixed(1);
-      label.textContent = `处理帧对 ${i+1}/${totalPairs}，子帧 ${j}/${perPair} · ${elapsed}s`;
-      bar.style.width = Math.round(done/total*100) + '%';
-
-      // Yield to UI before heavy computation
-      await new Promise(r => setTimeout(r, 20));
-
-      const interpImg = _fiInterpolatePair(frameImgs[i].imgData, frameImgs[i+1].imgData, t, blockSize);
-      newFrames.push({ insertAfter: i, imgData: interpImg, t, w: frameImgs[i].w, h: frameImgs[i].h });
-      done++;
-      bar.style.width = Math.round(done/total*100) + '%';
-    }
-  }
-
-  // Build new optPreviewData with interpolated frames inserted
-  // Map validFrames indices back to optPreviewData indices
-  const validToOriginal = [];
-  for (const vf of validFrames) {
-    const idx = optPreviewData.indexOf(vf);
-    validToOriginal.push(idx);
+  // Save backup for undo
+  if (!optDupBackup) {
+    optDupBackup = optPreviewData.map(d => ({...d}));
+    optDupBackupSrcImg = srcImg;
   }
 
   const newData = [];
-  let validIdx = 0;
   for (let i = 0; i < optPreviewData.length; i++) {
-    newData.push({...optPreviewData[i]});
-    // Check if this original index corresponds to a valid frame
-    if (validIdx < validFrames.length && validToOriginal[validIdx] === i) {
-      const interpForPair = newFrames.filter(n => n.insertAfter === validIdx);
-      for (const nf of interpForPair) {
-        newData.push({
-          id: -1 - nf.insertAfter * 10 - Math.round(nf.t * 10),
-          origX: 0, origY: 0, origW: nf.w, origH: nf.h,
-          srcX: 0, srcY: 0, srcW: nf.w, srcH: nf.h,
-          unifiedW: nf.w, unifiedH: nf.h,
-          offsetX: 0, offsetY: 0,
-          _interpImgData: nf.imgData,
-          _isInterp: true
-        });
-      }
-      validIdx++;
+    const d = optPreviewData[i];
+    newData.push({...d});
+    // Insert a copy after each frame (except the last)
+    if (i < optPreviewData.length - 1) {
+      newData.push({
+        ...d,
+        id: -1 - i,
+        _isInterp: true
+      });
     }
   }
 
   optPreviewData = newData;
   stopOptAnim();
 
-  const elapsed = ((Date.now()-startTime)/1000).toFixed(1);
-  label.textContent = `✅ 完成！${optInterpBackup.length} → ${optPreviewData.length} 帧 · ${elapsed}s`;
-  document.getElementById('optInterpInfo').textContent = `${optPreviewData.length} 帧`;
-  document.getElementById('btnOptInterpReset').style.display = '';
-  document.getElementById('btnOptInterpRun').disabled = false;
-
-  // Update frame indicator and restart animation
+  document.getElementById('btnOptDupUndo').style.display = '';
+  document.getElementById('btnOptCompare').style.display = '';
   updateOptFrameIndicator();
-  playOptAnim();
-  toast(`插帧完成：${optInterpBackup.length} → ${optPreviewData.length} 帧`);
+  startOptAnim();
+  toast(`已复制中间帧：${optDupBackup.length} → ${optPreviewData.length} 帧`);
 }
 
-function resetOptInterpolation() {
-  if (!optInterpBackup) return;
-  optPreviewData = optInterpBackup.map(d => ({...d}));
-  optInterpBackup = null;
+function undoOptDup() {
+  if (!optDupBackup) { toast('没有可撤回的操作'); return; }
+  optPreviewData = optDupBackup.map(d => ({...d}));
+  optDupBackup = null;
+  optDupBackupSrcImg = null;
   stopOptAnim();
-  document.getElementById('optInterpReset').style.display = 'none';
-  document.getElementById('optInterpProgress').style.display = 'none';
-  document.getElementById('optInterpInfo').textContent = `${optPreviewData.length} 帧`;
+  document.getElementById('btnOptDupUndo').style.display = 'none';
+  document.getElementById('btnOptCompare').style.display = 'none';
   updateOptFrameIndicator();
-  playOptAnim();
-  toast('已撤销插帧');
+  startOptAnim();
+  toast('已撤回复制');
 }
 
-// Patch renderOptFrame to support interpolated frames
-const _origRenderOptFrame = typeof renderOptFrame === 'function' ? renderOptFrame : null;
+// Opt compare animation
+let optCompareTimer = null;
+let optCompareIdx = 0;
+
+function showOptCompareModal() {
+  if (!optDupBackup) { toast('没有可对比的数据'); return; }
+  document.getElementById('compareBeforeCount').textContent = optDupBackup.length;
+  document.getElementById('compareAfterCount').textContent = optPreviewData.length;
+  document.getElementById('compareModal').classList.add('show');
+  optCompareIdx = 0;
+  renderOptCompareFrame();
+}
+
+
+function renderOptCompareFrame() {
+  if (!optDupBackup || !optPreviewData || !srcImg) return;
+
+  // Before (original optimized frames)
+  const befCvs = document.getElementById('compareBeforeCvs');
+  const befCtx = befCvs.getContext('2d');
+  const befD = optDupBackup[optCompareIdx % optDupBackup.length];
+  const befUw = befD.unifiedW, befUh = befD.unifiedH;
+  const befS = Math.min(200 / befUw, 120 / befUh, 4);
+  befCvs.width = Math.ceil(befUw * befS);
+  befCvs.height = Math.ceil(befUh * befS);
+  befCtx.imageSmoothingEnabled = false;
+  befCtx.clearRect(0, 0, befCvs.width, befCvs.height);
+  const befOx = Math.round((befCvs.width - befUw * befS) / 2);
+  const befOy = Math.round((befCvs.height - befUh * befS) / 2);
+  // Draw optimized frame
+  const befOff = document.createElement('canvas');
+  befOff.width = befUw; befOff.height = befUh;
+  const befOffCtx = befOff.getContext('2d');
+  befOffCtx.imageSmoothingEnabled = false;
+  befOffCtx.drawImage(srcImg, befD.srcX, befD.srcY, befD.srcW, befD.srcH, befD.offsetX, befD.offsetY, befD.srcW, befD.srcH);
+  befCtx.drawImage(befOff, 0, 0, befUw, befUh, befOx, befOy, Math.ceil(befUw * befS), Math.ceil(befUh * befS));
+
+  // After (with duplicated frames)
+  const aftCvs = document.getElementById('compareAfterCvs');
+  const aftCtx = aftCvs.getContext('2d');
+  const aftD = optPreviewData[optCompareIdx % optPreviewData.length];
+  const aftUw = aftD.unifiedW, aftUh = aftD.unifiedH;
+  const aftS = Math.min(200 / aftUw, 120 / aftUh, 4);
+  aftCvs.width = Math.ceil(aftUw * aftS);
+  aftCvs.height = Math.ceil(aftUh * aftS);
+  aftCtx.imageSmoothingEnabled = false;
+  aftCtx.clearRect(0, 0, aftCvs.width, aftCvs.height);
+  const aftOx = Math.round((aftCvs.width - aftUw * aftS) / 2);
+  const aftOy = Math.round((aftCvs.height - aftUh * aftS) / 2);
+  const aftOff = document.createElement('canvas');
+  aftOff.width = aftUw; aftOff.height = aftUh;
+  const aftOffCtx = aftOff.getContext('2d');
+  aftOffCtx.imageSmoothingEnabled = false;
+  aftOffCtx.drawImage(srcImg, aftD.srcX, aftD.srcY, aftD.srcW, aftD.srcH, aftD.offsetX, aftD.offsetY, aftD.srcW, aftD.srcH);
+  aftCtx.drawImage(aftOff, 0, 0, aftUw, aftUh, aftOx, aftOy, Math.ceil(aftUw * aftS), Math.ceil(aftUh * aftS));
+}
 
 function renderOptFrame(idx) {
   if (!optPreviewData || !optPreviewData.length || !srcImg) return;
@@ -3445,23 +3303,12 @@ function renderOptFrame(idx) {
   c.width = Math.ceil(uw*s); c.height = Math.ceil(uh*s);
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, c.width, c.height);
-
-  if (d._isInterp && d._interpImgData) {
-    // Draw interpolated ImageData directly
-    const tmpCvs = document.createElement('canvas');
-    tmpCvs.width = uw; tmpCvs.height = uh;
-    const tmpCtx = tmpCvs.getContext('2d');
-    tmpCtx.putImageData(d._interpImgData, 0, 0);
-    ctx.drawImage(tmpCvs, 0, 0, uw, uh, 0, 0, c.width, c.height);
-  } else {
-    // Normal optimized frame
-    const offCvs = document.createElement('canvas');
-    offCvs.width = uw; offCvs.height = uh;
-    const offCtx = offCvs.getContext('2d');
-    offCtx.imageSmoothingEnabled = false;
-    offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
-    ctx.drawImage(offCvs, 0, 0, uw, uh, 0, 0, c.width, c.height);
-  }
+  const offCvs = document.createElement('canvas');
+  offCvs.width = uw; offCvs.height = uh;
+  const offCtx = offCvs.getContext('2d');
+  offCtx.imageSmoothingEnabled = false;
+  offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
+  ctx.drawImage(offCvs, 0, 0, uw, uh, 0, 0, c.width, c.height);
 }
 
 function updateOptFrameIndicator() {
@@ -3470,127 +3317,196 @@ function updateOptFrameIndicator() {
 }
 
 // ---- UI Functions ----
-function showInterpModal() {
-  if (!frames.length) { toast('请先加载图片并检测帧'); return; }
-  const sf = frames.filter(f => f.selected); if (!sf.length) return;
-  document.getElementById('interpFrameCount').textContent = sf.length;
-  const factor = parseInt(document.getElementById('interpFactor').value);
-  document.getElementById('interpResultCount').textContent = sf.length + (sf.length - 1) * (factor - 1);
-  document.getElementById('interpProgress').style.display = 'none';
-  document.getElementById('btnInterpStart').disabled = false;
-  document.getElementById('interpModal').classList.add('show');
-  // Update result count when factor changes
-  document.getElementById('interpFactor').onchange = () => {
-    const f = parseInt(document.getElementById('interpFactor').value);
-    document.getElementById('interpResultCount').textContent = sf.length + (sf.length - 1) * (f - 1);
-  };
+// ---- Undo (撤回) ----
+function pushUndo() {
+  if (!srcImg || !frames.length) return;
+  undoStack.push({
+    srcImg: srcImg,
+    frames: frames.map(f => ({...f}))
+  });
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  document.getElementById('btnUndo').disabled = false;
 }
 
-async function runInterpolation() {
-  let sf = frames.filter(f => f.selected);
-  if (!sf.length) sf = [...frames];
-  if (sf.length < 2) { toast('至少需要 2 帧才能插帧'); return; }
+function undo() {
+  if (!undoStack.length) { toast('没有可撤回的操作'); return; }
+  const state = undoStack.pop();
+  srcImg = state.srcImg;
+  frames = state.frames;
+  invalidateAlpha();
+  renderCanvas();
+  renderRects();
+  updateAll();
+  toast('已撤回');
+  if (!undoStack.length) document.getElementById('btnUndo').disabled = true;
+}
 
-  const factor = parseInt(document.getElementById('interpFactor').value);
-  const blockSize = parseInt(document.getElementById('interpBlockSize').value);
-  const searchRadius = parseInt(document.getElementById('interpSearch').value);
+// ---- Compare Animation (插帧前后对比) ----
+let compareTimer = null;
+let compareIdx = 0;
 
-  // Disable button, show progress
-  document.getElementById('btnInterpStart').disabled = true;
-  document.getElementById('interpProgress').style.display = '';
-  const progBar = document.getElementById('interpProgressBar');
-  const progLabel = document.getElementById('interpProgressLabel');
+function showCompareModal() {
+  if (!preDupSrcImg || !preDupFrames) { toast('没有可对比的数据，请先执行复制中间帧'); return; }
+  document.getElementById('compareBeforeCount').textContent = preDupFrames.length;
+  document.getElementById('compareAfterCount').textContent = frames.length;
+  document.getElementById('compareModal').classList.add('show');
+  compareIdx = 0;
+  renderCompareFrame();
+}
 
-  // Extract frame ImageData from source image
-  const canvas = document.getElementById('mainCanvas');
-  const ctx = canvas.getContext('2d');
-  const frameImages = sf.map(f => {
-    const id = ctx.getImageData(f.x, f.y, f.w, f.h);
-    return { imgData: id, frame: f };
-  });
+function closeCompareModal() {
+  if (compareTimer) { clearInterval(compareTimer); compareTimer = null; }
+  document.getElementById('btnComparePlay').textContent = '▶ 播放对比';
+  document.getElementById('compareModal').classList.remove('show');
+}
 
-  const totalPairs = frameImages.length - 1;
-  const framesPerPair = factor - 1;
-  const total = totalPairs * framesPerPair;
-  let done = 0;
+function updateCompareFps() {
+  const fps = document.getElementById('compareFpsRange').value;
+  document.getElementById('compareFpsInfo').textContent = fps + 'fps';
+  // If playing, restart with new fps
+  if (compareTimer) {
+    clearInterval(compareTimer);
+    compareTimer = setInterval(() => {
+      if (optDupBackup) { optCompareIdx++; renderOptCompareFrame(); }
+      else { compareIdx++; renderCompareFrame(); }
+    }, 1000 / fps);
+  }
+}
 
-  // Collect new frames to insert
-  const newFrames = [];
-  const startTime = Date.now();
+function toggleCompareAnim() {
+  if (compareTimer) {
+    clearInterval(compareTimer); compareTimer = null;
+    document.getElementById('btnComparePlay').textContent = '▶ 播放对比';
+  } else {
+    if (!optDupBackup && !preDupFrames) return;
+    const fps = parseInt(document.getElementById('compareFpsRange').value) || 8;
+    document.getElementById('compareFpsInfo').textContent = fps + 'fps';
+    compareTimer = setInterval(() => {
+      if (optDupBackup) { optCompareIdx++; renderOptCompareFrame(); }
+      else { compareIdx++; renderCompareFrame(); }
+    }, 1000 / fps);
+    document.getElementById('btnComparePlay').textContent = '⏸ 暂停';
+  }
+}
 
-  for (let i = 0; i < totalPairs; i++) {
-    const fA = frameImages[i], fB = frameImages[i + 1];
+function renderCompareFrame() {
+  if (!preDupSrcImg || !preDupFrames || !srcImg) return;
 
-    for (let j = 1; j <= framesPerPair; j++) {
-      const t = j / factor;
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-      progLabel.textContent = `处理中 ${i+1}/${totalPairs} · ${elapsed}s`;
+  // Before (original)
+  const befCvs = document.getElementById('compareBeforeCvs');
+  const befCtx = befCvs.getContext('2d');
+  const befF = preDupFrames[compareIdx % preDupFrames.length];
+  const befS = Math.min(200 / befF.w, 120 / befF.h, 4);
+  befCvs.width = Math.ceil(befF.w * befS);
+  befCvs.height = Math.ceil(befF.h * befS);
+  befCtx.imageSmoothingEnabled = false;
+  befCtx.clearRect(0, 0, befCvs.width, befCvs.height);
+  // Center the frame
+  const befOx = Math.round((befCvs.width - befF.w * befS) / 2);
+  const befOy = Math.round((befCvs.height - befF.h * befS) / 2);
+  befCtx.drawImage(preDupSrcImg, befF.x, befF.y, befF.w, befF.h, befOx, befOy, Math.ceil(befF.w * befS), Math.ceil(befF.h * befS));
 
-      // Yield to UI
-      await new Promise(r => setTimeout(r, 10));
+  // After (with duplicated frames)
+  const aftCvs = document.getElementById('compareAfterCvs');
+  const aftCtx = aftCvs.getContext('2d');
+  const aftF = frames[compareIdx % frames.length];
+  const aftS = Math.min(200 / aftF.w, 120 / aftF.h, 4);
+  aftCvs.width = Math.ceil(aftF.w * aftS);
+  aftCvs.height = Math.ceil(aftF.h * aftS);
+  aftCtx.imageSmoothingEnabled = false;
+  aftCtx.clearRect(0, 0, aftCvs.width, aftCvs.height);
+  const aftOx = Math.round((aftCvs.width - aftF.w * aftS) / 2);
+  const aftOy = Math.round((aftCvs.height - aftF.h * aftS) / 2);
+  aftCtx.drawImage(srcImg, aftF.x, aftF.y, aftF.w, aftF.h, aftOx, aftOy, Math.ceil(aftF.w * aftS), Math.ceil(aftF.h * aftS));
+}
 
-      const interpImg = _fiInterpolatePair(fA.imgData, fB.imgData, t, blockSize);
+// ---- Duplicate Middle Frames (复制中间帧) ----
+// 在每对相邻帧之间复制前帧作为中间帧，用户可微调
+function duplicateMiddleFrames() {
+  if (!frames.length) { toast('请先加载图片并检测帧'); return; }
+  if (!srcImg) { toast('请先加载图片'); return; }
 
-      // Draw interpolated frame back to canvas to get position
-      // We'll create a temporary canvas to composite
-      const tmpCvs = document.createElement('canvas');
-      tmpCvs.width = fA.imgData.width;
-      tmpCvs.height = fA.imgData.height;
-      const tmpCtx = tmpCvs.getContext('2d');
-      tmpCtx.putImageData(interpImg, 0, 0);
+  const sf = [...frames];
+  if (sf.length < 2) { toast('至少需要 2 帧才能复制中间帧'); return; }
 
-      // Calculate interpolated frame position (linear interpolation of x,y)
-      const ix = Math.round(fA.frame.x + (fB.frame.x - fA.frame.x) * t);
-      const iy = Math.round(fA.frame.y + (fB.frame.y - fA.frame.y) * t);
-      const iw = fA.imgData.width;
-      const ih = fA.imgData.height;
+  // Save snapshot for before/after comparison
+  preDupSrcImg = srcImg;
+  preDupFrames = sf.map(f => ({...f}));
 
-      newFrames.push({ insertAfter: i, imgData: interpImg, x: ix, y: iy, w: iw, h: ih });
+  // Save state for undo
+  pushUndo();
 
-      done++;
-      progBar.style.width = Math.round(done / total * 100) + '%';
+  // Build new frame list: insert a copy of each frame after itself
+  const newFrameList = [];
+  const allFrameData = [];
+
+  for (let i = 0; i < sf.length; i++) {
+    const f = sf[i];
+    const origCvs = document.createElement('canvas');
+    origCvs.width = f.w; origCvs.height = f.h;
+    const origCtx = origCvs.getContext('2d');
+    origCtx.imageSmoothingEnabled = false;
+    origCtx.drawImage(srcImg, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+    allFrameData.push({ imgData: origCtx.getImageData(0, 0, f.w, f.h), w: f.w, h: f.h, isDup: false });
+    newFrameList.push({ ...f, _isInterp: false });
+
+    if (i < sf.length - 1) {
+      allFrameData.push({ imgData: origCtx.getImageData(0, 0, f.w, f.h), w: f.w, h: f.h, isDup: true });
+      newFrameList.push({
+        id: nextId++,
+        x: 0, y: 0, w: f.w, h: f.h,
+        manual: true, selected: false,
+        _isInterp: true
+      });
     }
   }
 
-  // Now we need to insert new frames into the source image
-  // Strategy: extend the sprite sheet canvas and draw interpolated frames
-  if (newFrames.length > 0) {
-    // Rebuild frames array with interpolated frames inserted
-    const oldFrames = [...frames];
-    const selectedSet = new Set(sf.map(f => f.id));
-    const newFrameList = [];
+  const maxH = Math.max(...allFrameData.map(d => d.h));
+  let totalW = 0;
+  for (const d of allFrameData) totalW += d.w;
 
-    for (let i = 0; i < oldFrames.length; i++) {
-      newFrameList.push(oldFrames[i]);
-      // Check if this frame was selected and has a next selected frame
-      if (selectedSet.has(oldFrames[i].id)) {
-        // Find index in selected frames
-        const selIdx = sf.findIndex(f => f.id === oldFrames[i].id);
-        if (selIdx < sf.length - 1) {
-          // Insert interpolated frames after this one
-          const interpForThisPair = newFrames.filter(nf => nf.insertAfter === selIdx);
-          for (const nf of interpForThisPair) {
-            newFrameList.push({
-              id: nextId++,
-              x: nf.x, y: nf.y, w: nf.w, h: nf.h,
-              manual: true,
-              selected: true
-            });
-          }
-        }
-      }
-    }
+  const newCvs = document.createElement('canvas');
+  newCvs.width = totalW;
+  newCvs.height = maxH;
+  const newCtx = newCvs.getContext('2d');
+  newCtx.imageSmoothingEnabled = false;
 
+  let curX = 0;
+  for (let i = 0; i < allFrameData.length; i++) {
+    const d = allFrameData[i];
+    const offsetY = Math.round((maxH - d.h) / 2);
+    const tmpC = document.createElement('canvas');
+    tmpC.width = d.w; tmpC.height = d.h;
+    tmpC.getContext('2d').putImageData(d.imgData, 0, 0);
+    newCtx.drawImage(tmpC, 0, 0, d.w, d.h, curX, offsetY, d.w, d.h);
+    newFrameList[i].x = curX;
+    newFrameList[i].y = offsetY;
+    newFrameList[i].w = d.w;
+    newFrameList[i].h = d.h;
+    curX += d.w;
+  }
+
+  const newImg = new Image();
+  newImg.onload = () => {
+    srcImg = newImg;
     frames = newFrameList;
+    invalidateAlpha();
+    renderCanvas();
     renderRects();
     updateAll();
+    const dupCount = allFrameData.filter(d => d.isDup).length;
+    toast(`已复制 ${dupCount} 个中间帧：${sf.length} → ${frames.length} 帧`);
 
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    progLabel.textContent = `✅ 完成！插入 ${newFrames.length} 帧，耗时 ${elapsed}s`;
-    toast(`插帧完成：${sf.length} 帧 → ${frames.length} 帧，耗时 ${elapsed}s`);
-  }
+    // Auto-restart animation preview to include new frames
+    animIdx = 0;
+    if (animPlaying) { playAnim(); }
 
-  document.getElementById('btnInterpStart').disabled = false;
+    // Show compare button in toolbar
+    const btn = document.getElementById('btnCompareToolbar');
+    btn.style.display = '';
+    btn.disabled = false;
+  };
+  newImg.src = newCvs.toDataURL();
 }
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
