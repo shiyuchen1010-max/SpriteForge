@@ -306,7 +306,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans
           </div>
         </div>
       </div>
-      <div class="panel-section" style="flex:1;display:flex;flex-direction:column;overflow:hidden;border-bottom:none;">
+      <div class="panel-section" style="flex:1;display:flex;flex-direction:column;overflow:hidden;border-bottom:none;min-height:0;">
         <div class="panel-section-title">帧列表 <span id="listHint" style="font-weight:400;text-transform:none;letter-spacing:0;"></span></div>
         <div class="frame-list" id="frameList">
           <div class="empty" style="padding:24px;"><p style="font-size:12px;">加载图片后开始</p></div>
@@ -478,7 +478,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans
         </div>
       </div>
 
-      <div class="modal-actions" id="optStep2Actions">
+      <div class="modal-actions" id="optStep2Actions" style="position:sticky;bottom:0;background:var(--bg-panel);padding:12px 0 0;margin-top:8px;z-index:1;">
         <button class="btn" onclick="backToOptStep1()">← 返回调整</button>
         <button class="btn btn-danger" onclick="discardOptimize()">放弃</button>
         <button class="btn" onclick="toggleOptInterpPanel()" id="btnOptInterp" title="在优化后的帧之间插入中间帧">🎞️ 插帧</button>
