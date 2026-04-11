@@ -3284,8 +3284,9 @@ function _fiFillHoles(img, wr) {
   return r;
 }
 function _fiInterpolatePair(fA, fB, t, bs) {
-  const mvF=_fiBuildMotionField(fA,fB,bs,Math.ceil(bs*2));
-  const mvB=_fiBuildMotionField(fB,fA,bs,Math.ceil(bs*2));
+  const sr = Math.max(Math.ceil(bs * 2), Math.ceil(Math.max(fA.width, fA.height) * 0.25));
+  const mvF=_fiBuildMotionField(fA,fB,bs,sr);
+  const mvB=_fiBuildMotionField(fB,fA,bs,sr);
   const fwd=_fiWarp(fA,mvF,bs,t,true), bwd=_fiWarp(fB,mvB,bs,t,false);
   const w=fA.width, h=fA.height, bX=Math.ceil(w/bs), out=_fiCreateImageData(w,h), ow=new Uint8Array(w*h);
   const OCCL=60;
@@ -3320,7 +3321,11 @@ function toggleOptInterpPanel() {
 }
 
 async function runOptInterpolation() {
-  if (!optPreviewData || optPreviewData.length < 2) { toast('至少需要 2 帧'); return; }
+  if (!optPreviewData || !srcImg) { toast('没有可用的帧数据'); return;
+  }
+  // Filter out any invalid frames
+  const validFrames = optPreviewData.filter(d => !d._isInterp && d.srcW > 0 && d.srcH > 0);
+  if (validFrames.length < 2) { toast('至少需要 2 个有效帧才能插帧'); return; }
 
   const factor = parseInt(document.getElementById('optInterpFactor').value);
   const blockSize = parseInt(document.getElementById('optInterpBS').value);
@@ -3334,18 +3339,16 @@ async function runOptInterpolation() {
   const label = document.getElementById('optInterpLabel');
   const startTime = Date.now();
 
-  // Build unified frame images from optPreviewData
-  const uw = optPreviewData[0].unifiedW;
-  const uh = optPreviewData[0].unifiedH;
-  const offCvs = document.createElement('canvas');
-  offCvs.width = uw; offCvs.height = uh;
-  const offCtx = offCvs.getContext('2d');
-
-  const frameImgs = optPreviewData.map(d => {
-    offCtx.clearRect(0, 0, uw, uh);
-    offCtx.imageSmoothingEnabled = false;
-    offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
-    return offCtx.getImageData(0, 0, uw, uh);
+  // Build frame images: use the actual trimmed frame content, not the full unified canvas
+  // This makes block matching much faster and more accurate
+  const frameImgs = validFrames.map(d => {
+    const tmpCvs = document.createElement('canvas');
+    tmpCvs.width = d.srcW;
+    tmpCvs.height = d.srcH;
+    const tmpCtx = tmpCvs.getContext('2d');
+    tmpCtx.imageSmoothingEnabled = false;
+    tmpCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, 0, 0, d.srcW, d.srcH);
+    return { imgData: tmpCtx.getImageData(0, 0, d.srcW, d.srcH), w: d.srcW, h: d.srcH, origData: d };
   });
 
   const totalPairs = frameImgs.length - 1;
@@ -3357,33 +3360,47 @@ async function runOptInterpolation() {
   for (let i = 0; i < totalPairs; i++) {
     for (let j = 1; j <= perPair; j++) {
       const t = j / factor;
-      label.textContent = `处理 ${done+1}/${total} · ${((Date.now()-startTime)/1000).toFixed(0)}s`;
-      await new Promise(r => setTimeout(r, 5));
+      const elapsed = ((Date.now()-startTime)/1000).toFixed(1);
+      label.textContent = `处理帧对 ${i+1}/${totalPairs}，子帧 ${j}/${perPair} · ${elapsed}s`;
+      bar.style.width = Math.round(done/total*100) + '%';
 
-      const interpImg = _fiInterpolatePair(frameImgs[i], frameImgs[i+1], t, blockSize);
-      newFrames.push({ insertAfter: i, imgData: interpImg, t });
+      // Yield to UI before heavy computation
+      await new Promise(r => setTimeout(r, 20));
+
+      const interpImg = _fiInterpolatePair(frameImgs[i].imgData, frameImgs[i+1].imgData, t, blockSize);
+      newFrames.push({ insertAfter: i, imgData: interpImg, t, w: frameImgs[i].w, h: frameImgs[i].h });
       done++;
       bar.style.width = Math.round(done/total*100) + '%';
     }
   }
 
   // Build new optPreviewData with interpolated frames inserted
+  // Map validFrames indices back to optPreviewData indices
+  const validToOriginal = [];
+  for (const vf of validFrames) {
+    const idx = optPreviewData.indexOf(vf);
+    validToOriginal.push(idx);
+  }
+
   const newData = [];
+  let validIdx = 0;
   for (let i = 0; i < optPreviewData.length; i++) {
     newData.push({...optPreviewData[i]});
-    const interpForPair = newFrames.filter(n => n.insertAfter === i);
-    for (const nf of interpForPair) {
-      // Interpolated frames are synthetic: they live on a virtual unified canvas
-      // We store the ImageData directly and mark them as interpolated
-      newData.push({
-        id: -1 - nf.insertAfter * 10 - Math.round(nf.t * 10), // synthetic id
-        origX: 0, origY: 0, origW: uw, origH: uh,
-        srcX: 0, srcY: 0, srcW: uw, srcH: uh,
-        unifiedW: uw, unifiedH: uh,
-        offsetX: 0, offsetY: 0,
-        _interpImgData: nf.imgData, // stored ImageData for interpolated frames
-        _isInterp: true
-      });
+    // Check if this original index corresponds to a valid frame
+    if (validIdx < validFrames.length && validToOriginal[validIdx] === i) {
+      const interpForPair = newFrames.filter(n => n.insertAfter === validIdx);
+      for (const nf of interpForPair) {
+        newData.push({
+          id: -1 - nf.insertAfter * 10 - Math.round(nf.t * 10),
+          origX: 0, origY: 0, origW: nf.w, origH: nf.h,
+          srcX: 0, srcY: 0, srcW: nf.w, srcH: nf.h,
+          unifiedW: nf.w, unifiedH: nf.h,
+          offsetX: 0, offsetY: 0,
+          _interpImgData: nf.imgData,
+          _isInterp: true
+        });
+      }
+      validIdx++;
     }
   }
 
