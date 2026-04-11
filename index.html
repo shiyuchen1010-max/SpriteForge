@@ -481,7 +481,35 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans
       <div class="modal-actions" id="optStep2Actions">
         <button class="btn" onclick="backToOptStep1()">← 返回调整</button>
         <button class="btn btn-danger" onclick="discardOptimize()">放弃</button>
+        <button class="btn" onclick="toggleOptInterpPanel()" id="btnOptInterp" title="在优化后的帧之间插入中间帧">🎞️ 插帧</button>
         <button class="btn btn-accent" onclick="applyAndExport()">✅ 应用并导出</button>
+      </div>
+      <!-- Interpolation panel (hidden by default) -->
+      <div id="optInterpPanel" style="display:none;margin-top:10px;padding:10px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);">
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px;">🎞️ 帧插值</div>
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+          <label style="font-size:11px;white-space:nowrap;">倍率</label>
+          <select id="optInterpFactor" style="font-size:11px;padding:3px 6px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:4px;">
+            <option value="2">2x</option>
+            <option value="3">3x</option>
+          </select>
+          <label style="font-size:11px;white-space:nowrap;">块大小</label>
+          <select id="optInterpBS" style="font-size:11px;padding:3px 6px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text);border-radius:4px;">
+            <option value="4">4（精细）</option>
+            <option value="8" selected>8（推荐）</option>
+          </select>
+          <span style="font-size:11px;color:var(--text-dim);" id="optInterpInfo"></span>
+        </div>
+        <div id="optInterpProgress" style="display:none;margin-bottom:8px;">
+          <div style="height:4px;background:var(--bg-panel);border-radius:2px;overflow:hidden;">
+            <div id="optInterpBar" style="height:100%;width:0%;background:var(--accent);border-radius:2px;transition:width 0.1s;"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px;" id="optInterpLabel"></div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-accent" onclick="runOptInterpolation()" id="btnOptInterpRun" style="font-size:11px;">开始插帧</button>
+          <button class="btn" onclick="resetOptInterpolation()" id="btnOptInterpReset" style="font-size:11px;display:none;">↺ 撤销插帧</button>
+        </div>
       </div>
     </div>
 
@@ -2149,10 +2177,15 @@ function startOptAnim() {
   optAnimTimer = setInterval(() => {
     const idx = optAnimIdx % total;
     const d = optPreviewData[idx];
-    // Step 1: Draw original trimmed content onto unified-size transparent canvas
-    offCtx.clearRect(0, 0, uw, uh);
-    offCtx.imageSmoothingEnabled = false;
-    offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
+    // Check if this is an interpolated frame
+    if (d._isInterp && d._interpImgData) {
+      offCtx.clearRect(0, 0, uw, uh);
+      offCtx.putImageData(d._interpImgData, 0, 0);
+    } else {
+      offCtx.clearRect(0, 0, uw, uh);
+      offCtx.imageSmoothingEnabled = false;
+      offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
+    }
     // Step 2: Draw the composited frame onto the preview canvas
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, c.width, c.height);
@@ -2192,8 +2225,12 @@ function optStepFrame(dir) {
   offCvs.width = uw; offCvs.height = uh;
   const offCtx = offCvs.getContext('2d');
   offCtx.clearRect(0, 0, uw, uh);
-  offCtx.imageSmoothingEnabled = false;
-  offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
+  if (d._isInterp && d._interpImgData) {
+    offCtx.putImageData(d._interpImgData, 0, 0);
+  } else {
+    offCtx.imageSmoothingEnabled = false;
+    offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
+  }
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, c.width, c.height);
   ctx.drawImage(offCvs, 0, 0, uw, uh, 0, 0, c.width, c.height);
@@ -2361,19 +2398,35 @@ function backToOptStep1() {
 // Apply optimization (commit changes)
 function applyOptimize() {
   if (!optPreviewData || !optBackup) { toast('没有可应用的优化'); return; }
+  const newFrames = [];
   for (const d of optPreviewData) {
-    const f = frames.find(fr => fr.id === d.id);
-    if (f) {
-      f.x = d.srcX; f.y = d.srcY; f.w = d.srcW; f.h = d.srcH;
-      f.unifiedW = d.unifiedW;
-      f.unifiedH = d.unifiedH;
-      f.offsetX = d.offsetX;
-      f.offsetY = d.offsetY;
+    if (d._isInterp) {
+      // Interpolated frame: create a new frame entry
+      // We need to composite it onto the source image first
+      const uw = d.unifiedW, uh = d.unifiedH;
+      const tmpCvs = document.createElement('canvas');
+      tmpCvs.width = uw; tmpCvs.height = uh;
+      const tmpCtx = tmpCvs.getContext('2d');
+      tmpCtx.putImageData(d._interpImgData, 0, 0);
+      // For now, interpolated frames are stored as canvas data
+      newFrames.push({
+        id: nextId++, x: 0, y: 0, w: uw, h: uh,
+        manual: true, _interpCanvas: tmpCvs,
+        unifiedW: uw, unifiedH: uh, offsetX: 0, offsetY: 0
+      });
+    } else {
+      const f = frames.find(fr => fr.id === d.id);
+      if (f) {
+        f.x = d.srcX; f.y = d.srcY; f.w = d.srcW; f.h = d.srcH;
+        f.unifiedW = d.unifiedW;
+        f.unifiedH = d.unifiedH;
+        f.offsetX = d.offsetX;
+        f.offsetY = d.offsetY;
+      }
     }
   }
-  optBackup = null;
-  optPreviewData = null;
-  optTrimmedData = null;
+  if (newFrames.length) frames.push(...newFrames);
+  optBackup = null; optPreviewData = null; optTrimmedData = null; optInterpBackup = null;
   stopOptAnim();
   renderRects(); updateAll();
   toast('✅ 优化已应用');
@@ -2382,19 +2435,31 @@ function applyOptimize() {
 // Apply optimization and go to Step 3 (export)
 function applyAndExport() {
   if (!optPreviewData || !optBackup) { toast('没有可应用的优化'); return; }
+  const newFrames = [];
   for (const d of optPreviewData) {
-    const f = frames.find(fr => fr.id === d.id);
-    if (f) {
-      f.x = d.srcX; f.y = d.srcY; f.w = d.srcW; f.h = d.srcH;
-      f.unifiedW = d.unifiedW;
-      f.unifiedH = d.unifiedH;
-      f.offsetX = d.offsetX;
-      f.offsetY = d.offsetY;
+    if (d._isInterp) {
+      const uw = d.unifiedW, uh = d.unifiedH;
+      const tmpCvs = document.createElement('canvas');
+      tmpCvs.width = uw; tmpCvs.height = uh;
+      tmpCvs.getContext('2d').putImageData(d._interpImgData, 0, 0);
+      newFrames.push({
+        id: nextId++, x: 0, y: 0, w: uw, h: uh,
+        manual: true, _interpCanvas: tmpCvs,
+        unifiedW: uw, unifiedH: uh, offsetX: 0, offsetY: 0
+      });
+    } else {
+      const f = frames.find(fr => fr.id === d.id);
+      if (f) {
+        f.x = d.srcX; f.y = d.srcY; f.w = d.srcW; f.h = d.srcH;
+        f.unifiedW = d.unifiedW;
+        f.unifiedH = d.unifiedH;
+        f.offsetX = d.offsetX;
+        f.offsetY = d.offsetY;
+      }
     }
   }
-  optBackup = null;
-  optPreviewData = null;
-  optTrimmedData = null;
+  if (newFrames.length) frames.push(...newFrames);
+  optBackup = null; optPreviewData = null; optTrimmedData = null; optInterpBackup = null;
   stopOptAnim();
   renderRects(); updateAll();
 
@@ -3229,6 +3294,154 @@ function _fiInterpolatePair(fA, fB, t, bs) {
     else if (bwd.written[pi]) { _fiSetPixel(out,x,y,bc[0],bc[1],bc[2],bc[3]); ow[pi]=1; }
   }
   return _fiFillHoles(out, ow);
+}
+
+// ============================================================================
+//  Optimize Panel Interpolation (优化面板内的插帧)
+// ============================================================================
+
+let optInterpBackup = null; // backup of optPreviewData before interpolation
+
+function toggleOptInterpPanel() {
+  const panel = document.getElementById('optInterpPanel');
+  const visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : '';
+  if (!visible && optPreviewData) {
+    document.getElementById('optInterpInfo').textContent = `${optPreviewData.length} 帧`;
+  }
+}
+
+async function runOptInterpolation() {
+  if (!optPreviewData || optPreviewData.length < 2) { toast('至少需要 2 帧'); return; }
+
+  const factor = parseInt(document.getElementById('optInterpFactor').value);
+  const blockSize = parseInt(document.getElementById('optInterpBS').value);
+
+  // Backup current optPreviewData
+  if (!optInterpBackup) optInterpBackup = optPreviewData.map(d => ({...d}));
+
+  document.getElementById('btnOptInterpRun').disabled = true;
+  document.getElementById('optInterpProgress').style.display = '';
+  const bar = document.getElementById('optInterpBar');
+  const label = document.getElementById('optInterpLabel');
+  const startTime = Date.now();
+
+  // Build unified frame images from optPreviewData
+  const uw = optPreviewData[0].unifiedW;
+  const uh = optPreviewData[0].unifiedH;
+  const offCvs = document.createElement('canvas');
+  offCvs.width = uw; offCvs.height = uh;
+  const offCtx = offCvs.getContext('2d');
+
+  const frameImgs = optPreviewData.map(d => {
+    offCtx.clearRect(0, 0, uw, uh);
+    offCtx.imageSmoothingEnabled = false;
+    offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
+    return offCtx.getImageData(0, 0, uw, uh);
+  });
+
+  const totalPairs = frameImgs.length - 1;
+  const perPair = factor - 1;
+  const total = totalPairs * perPair;
+  let done = 0;
+  const newFrames = [];
+
+  for (let i = 0; i < totalPairs; i++) {
+    for (let j = 1; j <= perPair; j++) {
+      const t = j / factor;
+      label.textContent = `处理 ${done+1}/${total} · ${((Date.now()-startTime)/1000).toFixed(0)}s`;
+      await new Promise(r => setTimeout(r, 5));
+
+      const interpImg = _fiInterpolatePair(frameImgs[i], frameImgs[i+1], t, blockSize);
+      newFrames.push({ insertAfter: i, imgData: interpImg, t });
+      done++;
+      bar.style.width = Math.round(done/total*100) + '%';
+    }
+  }
+
+  // Build new optPreviewData with interpolated frames inserted
+  const newData = [];
+  for (let i = 0; i < optPreviewData.length; i++) {
+    newData.push({...optPreviewData[i]});
+    const interpForPair = newFrames.filter(n => n.insertAfter === i);
+    for (const nf of interpForPair) {
+      // Interpolated frames are synthetic: they live on a virtual unified canvas
+      // We store the ImageData directly and mark them as interpolated
+      newData.push({
+        id: -1 - nf.insertAfter * 10 - Math.round(nf.t * 10), // synthetic id
+        origX: 0, origY: 0, origW: uw, origH: uh,
+        srcX: 0, srcY: 0, srcW: uw, srcH: uh,
+        unifiedW: uw, unifiedH: uh,
+        offsetX: 0, offsetY: 0,
+        _interpImgData: nf.imgData, // stored ImageData for interpolated frames
+        _isInterp: true
+      });
+    }
+  }
+
+  optPreviewData = newData;
+  stopOptAnim();
+
+  const elapsed = ((Date.now()-startTime)/1000).toFixed(1);
+  label.textContent = `✅ 完成！${optInterpBackup.length} → ${optPreviewData.length} 帧 · ${elapsed}s`;
+  document.getElementById('optInterpInfo').textContent = `${optPreviewData.length} 帧`;
+  document.getElementById('btnOptInterpReset').style.display = '';
+  document.getElementById('btnOptInterpRun').disabled = false;
+
+  // Update frame indicator and restart animation
+  updateOptFrameIndicator();
+  playOptAnim();
+  toast(`插帧完成：${optInterpBackup.length} → ${optPreviewData.length} 帧`);
+}
+
+function resetOptInterpolation() {
+  if (!optInterpBackup) return;
+  optPreviewData = optInterpBackup.map(d => ({...d}));
+  optInterpBackup = null;
+  stopOptAnim();
+  document.getElementById('optInterpReset').style.display = 'none';
+  document.getElementById('optInterpProgress').style.display = 'none';
+  document.getElementById('optInterpInfo').textContent = `${optPreviewData.length} 帧`;
+  updateOptFrameIndicator();
+  playOptAnim();
+  toast('已撤销插帧');
+}
+
+// Patch renderOptFrame to support interpolated frames
+const _origRenderOptFrame = typeof renderOptFrame === 'function' ? renderOptFrame : null;
+
+function renderOptFrame(idx) {
+  if (!optPreviewData || !optPreviewData.length || !srcImg) return;
+  const d = optPreviewData[idx];
+  const c = document.getElementById('optPreviewCanvas');
+  const ctx = c.getContext('2d');
+  const uw = d.unifiedW, uh = d.unifiedH;
+  const s = Math.min(200/uw, 100/uh, 4);
+  c.width = Math.ceil(uw*s); c.height = Math.ceil(uh*s);
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, c.width, c.height);
+
+  if (d._isInterp && d._interpImgData) {
+    // Draw interpolated ImageData directly
+    const tmpCvs = document.createElement('canvas');
+    tmpCvs.width = uw; tmpCvs.height = uh;
+    const tmpCtx = tmpCvs.getContext('2d');
+    tmpCtx.putImageData(d._interpImgData, 0, 0);
+    ctx.drawImage(tmpCvs, 0, 0, uw, uh, 0, 0, c.width, c.height);
+  } else {
+    // Normal optimized frame
+    const offCvs = document.createElement('canvas');
+    offCvs.width = uw; offCvs.height = uh;
+    const offCtx = offCvs.getContext('2d');
+    offCtx.imageSmoothingEnabled = false;
+    offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
+    ctx.drawImage(offCvs, 0, 0, uw, uh, 0, 0, c.width, c.height);
+  }
+}
+
+function updateOptFrameIndicator() {
+  if (!optPreviewData) return;
+  document.getElementById('optFrameIndicator').textContent = `${optAnimIdx+1}/${optPreviewData.length}`;
 }
 
 // ---- UI Functions ----
