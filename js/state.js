@@ -1,0 +1,26 @@
+
+let srcImg = null, frames = [], selId = null, zoom = 1, nextId = 0;
+let imageStore = {};
+let currentImageId = null;
+let imageIdCounter = 0;
+let animPlaying = false, animIdx = 0, animTimer = null;
+let exportMode = '', ctxFrameId = null;
+let interaction = null;
+let _aData = null, _aW = 0, _aH = 0;
+let lockedHeight = 0;
+let lockedBottom = 0;
+let lockedTop = 0;
+let bgRemoveActive = false;
+let bgOriginalData = null;
+let bgPickedColor = null;
+let bgPreviewData = null;
+let optBackup = null;
+let optPreviewData = null;
+let optTrimmedData = null;
+let optAnimTimer = null;
+let optAnimIdx = 0;
+let optAnimPlaying = false;
+let manualAnchor = null;
+let anchorColorIdx = 0;
+let anchorPreviewIdx = 0;
+let optInterpBackup = null;
