@@ -1,36 +1,39 @@
-// 简化的测试脚本 - 自动运行并输出详细结果
-console.log('=== SpriteForge 功能测试开始 ===');
+// 简化的测试脚本 - 手动运行
+console.log('=== SpriteForge 测试脚本加载完成 ===');
 
 // 检查页面元素
-console.log('1. 检查页面元素');
-const pages = [
-  { id: 'welcomePage', name: '欢迎页面' },
-  { id: 'editPage', name: '精灵编辑' },
-  { id: 'extractPage', name: '帧提取' }
-];
+function checkPageElements() {
+  console.log('1. 检查页面元素');
+  const pages = [
+    { id: 'welcomePage', name: '欢迎页面' },
+    { id: 'editPage', name: '精灵编辑' },
+    { id: 'extractPage', name: '帧提取' }
+  ];
 
-pages.forEach(page => {
-  const element = document.getElementById(page.id);
-  console.log(`   ${page.name} 存在: ${!!element}`);
-  if (element) {
-    console.log(`   ${page.name} 显示状态: ${element.style.display}`);
-  }
-});
+  pages.forEach(page => {
+    const element = document.getElementById(page.id);
+    console.log(`   ${page.name} 存在: ${!!element}`);
+    if (element) {
+      console.log(`   ${page.name} 显示状态: ${element.style.display}`);
+    }
+  });
+}
 
 // 检查功能函数
-console.log('2. 检查功能函数');
-const functions = [
-  { name: 'backToWelcome', desc: '返回欢迎页' },
-  { name: 'startFrameExtract', desc: '帧提取' },
-  { name: 'startSpriteEdit', desc: '精灵编辑' }
-];
+function checkFunctions() {
+  console.log('2. 检查功能函数');
+  const functions = [
+    { name: 'backToWelcome', desc: '返回欢迎页' },
+    { name: 'startFrameExtract', desc: '帧提取' },
+    { name: 'startSpriteEdit', desc: '精灵编辑' }
+  ];
 
-functions.forEach(func => {
-  console.log(`   ${func.desc} 函数存在: ${typeof window[func.name] === 'function'}`);
-});
+  functions.forEach(func => {
+    console.log(`   ${func.desc} 函数存在: ${typeof window[func.name] === 'function'}`);
+  });
+}
 
 // 测试页面切换
-console.log('3. 测试页面切换');
 function testPageSwitch(funcName, desc) {
   console.log(`\n   测试 ${desc} 页面切换`);
   try {
@@ -79,16 +82,15 @@ function testPageSwitch(funcName, desc) {
   }
 }
 
-// 执行测试
-testPageSwitch('startFrameExtract', '帧提取');
-testPageSwitch('startSpriteEdit', '精灵编辑');
-
-console.log('=== SpriteForge 功能测试完成 ===');
-
-// 手动测试函数（可在控制台调用）
+// 手动测试函数（在控制台调用）
 window.testAllFunctions = function() {
   console.log('=== 手动测试所有功能 ===');
+  checkPageElements();
+  checkFunctions();
   testPageSwitch('startFrameExtract', '帧提取');
   testPageSwitch('startSpriteEdit', '精灵编辑');
   console.log('=== 手动测试完成 ===');
 };
+
+console.log('使用方法: 在控制台输入 testAllFunctions() 运行测试');
+
