@@ -1,6 +1,52 @@
 // ===== State =====
 let srcImg = null, frames = [], selId = null, zoom = 1, nextId = 0;
 
+// ===== Navigation Functions =====
+function backToWelcome() {
+  // 显示welcomePage，隐藏所有其他页面
+  document.getElementById('welcomePage').style.display = 'flex';
+  document.getElementById('editPage').style.display = 'none';
+  document.getElementById('extractPage').style.display = 'none';
+}
+
+function startFrameExtract() {
+  // 隐藏welcomePage，显示extractPage
+  document.getElementById('welcomePage').style.display = 'none';
+  document.getElementById('editPage').style.display = 'none';
+  document.getElementById('extractPage').style.display = 'flex';
+  // 初始化帧提取界面
+  initExtractPage();
+}
+
+function startSpriteEdit() {
+  // 隐藏welcomePage，显示editPage
+  document.getElementById('welcomePage').style.display = 'none';
+  document.getElementById('editPage').style.display = 'flex';
+  document.getElementById('extractPage').style.display = 'none';
+}
+
+function initExtractPage() {
+  // 初始化帧提取页面，调用frame-extract.js中的渲染函数
+  if (window.renderExtractSources) {
+    window.renderExtractSources();
+  }
+  if (window.renderExtractTargets) {
+    window.renderExtractTargets();
+  }
+  if (window.renderGridOverlay) {
+    window.renderGridOverlay();
+  }
+}
+
+// ===== Toast Function =====
+function toast(msg, dur = 2000) {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.className = 'toast show';
+  setTimeout(() => t.className = 'toast', dur);
+}
+
 // ===== Multi-Image Management =====
 let imageStore = {}; // { id: { name, img, frames, selId, nextId, zoom, lockedHeight, lockedBottom, lockedTop } }
 let currentImageId = null;
@@ -126,14 +172,22 @@ function closeImage(id) {
 
 function renderImageTabs() {
   const tabs = document.getElementById('imageTabs');
-  tabs.innerHTML = '';
+  if (!tabs) return;
+  
+  // 使用文档片段批量更新DOM，减少重排
+  const fragment = document.createDocumentFragment();
+  
   for (const [id, data] of Object.entries(imageStore)) {
     const tab = document.createElement('div');
     tab.className = 'img-tab' + (id === currentImageId ? ' active' : '');
     const shortName = data.name.length > 12 ? data.name.slice(0, 10) + '..' : data.name;
     tab.innerHTML = `<span onclick="switchImage('${id}')">${shortName}</span><span class="close-tab" onclick="event.stopPropagation();closeImage('${id}')">✕</span>`;
-    tabs.appendChild(tab);
+    fragment.appendChild(tab);
   }
+  
+  // 一次性更新DOM，减少重排
+  tabs.innerHTML = '';
+  tabs.appendChild(fragment);
 }
 
 function addImageToStore(name, img) {
@@ -155,49 +209,138 @@ let interaction = null; // null | { type: 'draw'|'move'|'resize', ... }
 
 // Alpha cache
 let _aData = null, _aW = 0, _aH = 0;
+
+/**
+ * 获取图像的Alpha通道数据（带缓存）
+ * @returns {Uint8Array} Alpha通道数据
+ */
 function getAlpha() {
   if (_aData && _aW === srcImg.width && _aH === srcImg.height) return _aData;
-  const c = document.createElement('canvas'); c.width = srcImg.width; c.height = srcImg.height;
-  const x = c.getContext('2d'); x.drawImage(srcImg, 0, 0);
-  const d = x.getImageData(0, 0, c.width, c.height).data;
-  _aData = new Uint8Array(c.width * c.height);
-  for (let i = 0; i < _aData.length; i++) _aData[i] = d[i * 4 + 3];
-  _aW = c.width; _aH = c.height; return _aData;
+  
+  // 使用离屏画布获取图像数据
+  const c = document.createElement('canvas');
+  c.width = srcImg.width;
+  c.height = srcImg.height;
+  const x = c.getContext('2d');
+  
+  // Disable image smoothing
+  x.imageSmoothingEnabled = false;
+  x.mozImageSmoothingEnabled = false;
+  x.webkitImageSmoothingEnabled = false;
+  x.msImageSmoothingEnabled = false;
+  
+  x.drawImage(srcImg, 0, 0);
+  
+  // 获取图像数据并提取Alpha通道
+  const imgData = x.getImageData(0, 0, c.width, c.height);
+  const d = imgData.data;
+  const length = c.width * c.height;
+  
+  // 重用缓存数组如果大小相同
+  if (_aData && _aData.length === length) {
+    for (let i = 0; i < length; i++) {
+      _aData[i] = d[i * 4 + 3];
+    }
+  } else {
+    // 创建新的Uint8Array
+    _aData = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+      _aData[i] = d[i * 4 + 3];
+    }
+  }
+  
+  _aW = c.width;
+  _aH = c.height;
+  return _aData;
 }
-function invalidateAlpha() { _aData = null; }
+
+/**
+ * 使Alpha缓存失效
+ */
+function invalidateAlpha() {
+  _aData = null;
+  _aW = 0;
+  _aH = 0;
+}
 
 // ===== File =====
 function loadImage() { document.getElementById('fileInput').click(); }
+/**
+ * 处理文件上传
+ * @param {Event} e - 文件输入事件
+ */
 function handleFile(e) {
-  const f = e.target.files[0]; if (!f) return;
-  const r = new FileReader();
-  r.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
-      // Add to multi-image store FIRST (saves current image state)
-      addImageToStore(f.name, img);
-      // Then reset state for new image
-      srcImg = img; frames = []; selId = null; nextId = 0; invalidateAlpha();
-      lockedHeight = 0; lockedBottom = 0; lockedTop = 0;
-      document.getElementById('lockBottomChk').checked = false;
-      document.getElementById('lockTopChk').checked = false;
-      document.getElementById('lockHChk').checked = false;
-      document.getElementById('lockFixedChk').checked = false;
-      onLockCheckChange();
-      document.getElementById('emptyState').style.display = 'none';
-      document.getElementById('canvasFrame').style.display = 'inline-block';
-      document.getElementById('zoomBar').style.display = 'flex';
-      document.getElementById('coord').style.display = 'block';
-      document.getElementById('hintBar').style.display = 'block';
-      ['btnDetect','btnDetect2','btnOptimize','btnInterp','btnDelete','btnClearManual','btnBgMode'].forEach(id => document.getElementById(id).disabled = false);
-      document.getElementById('bgRemoveSection').style.display = '';
-      document.getElementById('imgInfo').textContent = `${img.width}×${img.height} · ${f.name}`;
-      renderCanvas(); zoomFit(); updateAll();
-      toast('图片已加载');
+  try {
+    const f = e.target.files[0]; 
+    if (!f) return;
+    
+    // 文件类型验证
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(f.type)) {
+      toast('只支持 JPEG、PNG、GIF 和 WebP 格式的图片');
+      return;
+    }
+    
+    // 文件大小限制 (5MB)
+    const maxSize = 5 * 1024 * 1024;
+    if (f.size > maxSize) {
+      toast('图片大小不能超过 5MB');
+      return;
+    }
+    
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            // 转义文件名，防止XSS攻击
+            const safeFileName = f.name.replace(/[<>&"'\/]/g, '');
+            // Add to multi-image store FIRST (saves current image state)
+            addImageToStore(safeFileName, img);
+            // Then reset state for new image
+            srcImg = img; frames = []; selId = null; nextId = 0; invalidateAlpha();
+            lockedHeight = 0; lockedBottom = 0; lockedTop = 0;
+            document.getElementById('lockBottomChk').checked = false;
+            document.getElementById('lockTopChk').checked = false;
+            document.getElementById('lockHChk').checked = false;
+            document.getElementById('lockFixedChk').checked = false;
+            onLockCheckChange();
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('canvasFrame').style.display = 'inline-block';
+            document.getElementById('zoomBar').style.display = 'flex';
+            document.getElementById('coord').style.display = 'block';
+            document.getElementById('hintBar').style.display = 'block';
+            ['btnDetect','btnDetect2','btnOptimize','btnInterp','btnDelete','btnClearManual','btnBgMode'].forEach(id => {
+              const btn = document.getElementById(id);
+              if (btn) btn.disabled = false;
+            });
+            document.getElementById('bgRemoveSection').style.display = '';
+            document.getElementById('imgInfo').textContent = `${img.width}×${img.height} · ${safeFileName}`;
+            renderCanvas(); zoomFit(); updateAll();
+            toast('图片已加载');
+          } catch (error) {
+            console.error('处理图像时出错:', error);
+            toast('处理图像时出错，请重试');
+          }
+        };
+        img.onerror = () => {
+          toast('图片加载失败，请重试');
+        };
+        img.src = ev.target.result;
+      } catch (error) {
+        console.error('创建图像对象时出错:', error);
+        toast('创建图像对象时出错，请重试');
+      }
     };
-    img.src = ev.target.result;
-  };
-  r.readAsDataURL(f);
+    r.onerror = () => {
+      toast('文件读取失败，请重试');
+    };
+    r.readAsDataURL(f);
+  } catch (error) {
+    console.error('处理文件时出错:', error);
+    toast('处理文件时出错，请重试');
+  }
 }
 
 // ===== Snap =====
@@ -354,6 +497,13 @@ function saveBgOriginal() {
     const c = document.createElement('canvas');
     c.width = srcImg.width; c.height = srcImg.height;
     const ctx = c.getContext('2d');
+    
+    // Disable image smoothing
+    ctx.imageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+    ctx.msImageSmoothingEnabled = false;
+    
     ctx.drawImage(srcImg, 0, 0);
     bgOriginalData = ctx.getImageData(0, 0, srcImg.width, srcImg.height);
   }
@@ -366,7 +516,7 @@ function resetBgRemove() {
   const ctx = c.getContext('2d');
   ctx.putImageData(bgOriginalData, 0, 0);
   // Update srcImg from canvas
-  const dataUrl = c.toDataURL();
+  const dataUrl = c.toDataURL('image/png');
   const img = new Image();
   img.onload = () => {
     srcImg = img;
@@ -386,7 +536,7 @@ function applyBgRemove() {
   if (!srcImg) return;
   // The preview is already on canvas, just update srcImg
   const c = document.getElementById('mainCanvas');
-  const dataUrl = c.toDataURL();
+  const dataUrl = c.toDataURL('image/png');
   const img = new Image();
   img.onload = () => {
     srcImg = img;
@@ -520,7 +670,15 @@ function renderCanvas() {
   if (!srcImg) return;
   const c = document.getElementById('mainCanvas');
   c.width = srcImg.width; c.height = srcImg.height;
-  c.getContext('2d').drawImage(srcImg, 0, 0);
+  const ctx = c.getContext('2d');
+  
+  // Disable image smoothing
+  ctx.imageSmoothingEnabled = false;
+  ctx.mozImageSmoothingEnabled = false;
+  ctx.webkitImageSmoothingEnabled = false;
+  ctx.msImageSmoothingEnabled = false;
+  
+  ctx.drawImage(srcImg, 0, 0);
   applyZoom();
 }
 function applyZoom() {
@@ -544,7 +702,12 @@ function zoomFit() {
 
 // ===== Frame Rects =====
 function renderRects() {
-  const box = document.getElementById('frameRects'); box.innerHTML = '';
+  const box = document.getElementById('frameRects');
+  if (!box) return;
+  
+  // 使用文档片段批量更新DOM，减少重排
+  const fragment = document.createDocumentFragment();
+  
   for (const f of frames) {
     const d = document.createElement('div');
     d.className = 'frame-rect' + (f.id === selId ? ' active' : '') + (!f.selected ? ' excluded' : '');
@@ -552,14 +715,14 @@ function renderRects() {
     d.innerHTML = `<span class="label">${f.manual?'✏️ ':''}${f.w}×${f.h}</span>`;
     d.oncontextmenu = e => { e.preventDefault(); showCtx(e, f.id); };
     d.onmousedown = e => onFrameMouseDown(e, f);
-    box.appendChild(d);
+    fragment.appendChild(d);
 
     // Show unified rect outline if frame has been optimized
     if (f.unifiedW && f.unifiedH) {
       const u = document.createElement('div');
       u.className = 'frame-rect unified-outline';
       u.style.cssText = `left:${(f.x + f.offsetX)*zoom}px;top:${(f.y + f.offsetY)*zoom}px;width:${f.unifiedW*zoom}px;height:${f.unifiedH*zoom}px;pointer-events:none;`;
-      box.appendChild(u);
+      fragment.appendChild(u);
     }
 
     // Resize handles for active frame
@@ -578,11 +741,11 @@ function renderRects() {
     const line = document.createElement('div');
     line.style.cssText = `position:absolute;left:0;top:${lockedBottom*zoom}px;width:${srcImg.width*zoom}px;height:0;border-top:2px dashed rgba(243,139,168,0.7);pointer-events:none;z-index:5;`;
     line.title = `地面线 Y=${lockedBottom}`;
-    box.appendChild(line);
+    fragment.appendChild(line);
     const lbl = document.createElement('div');
     lbl.style.cssText = `position:absolute;left:4px;top:${lockedBottom*zoom + 2}px;font-size:10px;color:rgba(243,139,168,0.9);pointer-events:none;z-index:5;`;
     lbl.textContent = `地面 Y=${lockedBottom}`;
-    box.appendChild(lbl);
+    fragment.appendChild(lbl);
   }
 
   // Draw top reference line in "lock top" mode
@@ -590,12 +753,16 @@ function renderRects() {
     const line = document.createElement('div');
     line.style.cssText = `position:absolute;left:0;top:${lockedTop*zoom}px;width:${srcImg.width*zoom}px;height:0;border-top:2px dashed rgba(100,200,255,0.7);pointer-events:none;z-index:5;`;
     line.title = `顶部线 Y=${lockedTop}`;
-    box.appendChild(line);
+    fragment.appendChild(line);
     const lbl = document.createElement('div');
     lbl.style.cssText = `position:absolute;left:4px;top:${lockedTop*zoom - 14}px;font-size:10px;color:rgba(100,200,255,0.9);pointer-events:none;z-index:5;`;
     lbl.textContent = `顶部 Y=${lockedTop}`;
-    box.appendChild(lbl);
+    fragment.appendChild(lbl);
   }
+  
+  // 一次性更新DOM，减少重排
+  box.innerHTML = '';
+  box.appendChild(fragment);
 }
 
 // ===== Mouse Interaction (unified - no mode switching) =====
@@ -938,47 +1105,130 @@ function expandEdges(f, at, margin, maxExp) {
   return expanded;
 }
 
+/**
+ * 裁剪透明边缘
+ * @param {Object} f - 帧对象
+ * @param {number} at - Alpha阈值
+ * @returns {Object|null} 裁剪后的边界 {x, y, w, h} 或 null
+ */
 function trimAlpha(f, at) {
-  const alpha = getAlpha(); const w = _aW;
-  const ix = Math.max(0, Math.round(f.x)), iy = Math.max(0, Math.round(f.y));
-  const iw = Math.min(Math.round(f.w), w - ix), ih = Math.min(Math.round(f.h), _aH - iy);
+  const alpha = getAlpha();
+  const w = _aW;
+  const ix = Math.max(0, Math.round(f.x));
+  const iy = Math.max(0, Math.round(f.y));
+  const iw = Math.min(Math.round(f.w), w - ix);
+  const ih = Math.min(Math.round(f.h), _aH - iy);
+  
   if (iw <= 0 || ih <= 0) return null;
 
-  // Scan edges inward to find content bounds (much faster than full scan)
+  // 快速扫描边缘，找到内容边界
   let x0 = 0, x1 = iw - 1, y0 = 0, y1 = ih - 1;
+  let foundContent = false;
 
-  // Find left edge
-  outer_l: for (let x = 0; x < iw; x++) { for (let y = 0; y < ih; y++) { if (alpha[(iy+y)*w+(ix+x)] > at) { x0 = x; break outer_l; } } }
-  // Find right edge
-  outer_r: for (let x = iw - 1; x >= 0; x--) { for (let y = 0; y < ih; y++) { if (alpha[(iy+y)*w+(ix+x)] > at) { x1 = x; break outer_r; } } }
-  // Find top edge
-  outer_t: for (let y = 0; y < ih; y++) { for (let x = x0; x <= x1; x++) { if (alpha[(iy+y)*w+(ix+x)] > at) { y0 = y; break outer_t; } } }
-  // Find bottom edge
-  outer_b: for (let y = ih - 1; y >= 0; y--) { for (let x = x0; x <= x1; x++) { if (alpha[(iy+y)*w+(ix+x)] > at) { y1 = y; break outer_b; } } }
+  // 查找左边界
+  for (let x = 0; x < iw; x++) {
+    for (let y = 0; y < ih; y++) {
+      if (alpha[(iy + y) * w + (ix + x)] > at) {
+        x0 = x;
+        foundContent = true;
+        break;
+      }
+    }
+    if (foundContent) break;
+  }
+  
+  if (!foundContent) return null;
+  foundContent = false;
+
+  // 查找右边界
+  for (let x = iw - 1; x >= x0; x--) {
+    for (let y = 0; y < ih; y++) {
+      if (alpha[(iy + y) * w + (ix + x)] > at) {
+        x1 = x;
+        foundContent = true;
+        break;
+      }
+    }
+    if (foundContent) break;
+  }
+  
+  foundContent = false;
+
+  // 查找上边界
+  for (let y = 0; y < ih; y++) {
+    for (let x = x0; x <= x1; x++) {
+      if (alpha[(iy + y) * w + (ix + x)] > at) {
+        y0 = y;
+        foundContent = true;
+        break;
+      }
+    }
+    if (foundContent) break;
+  }
+  
+  foundContent = false;
+
+  // 查找下边界
+  for (let y = ih - 1; y >= y0; y--) {
+    for (let x = x0; x <= x1; x++) {
+      if (alpha[(iy + y) * w + (ix + x)] > at) {
+        y1 = y;
+        foundContent = true;
+        break;
+      }
+    }
+    if (foundContent) break;
+  }
 
   if (x1 < x0 || y1 < y0) return null;
   return { x: ix + x0, y: iy + y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
-// Get content center of mass (weighted by alpha, with sampling for performance)
+/**
+ * 获取内容质心（基于Alpha加权，带采样以提高性能）
+ * @param {Object} f - 帧对象
+ * @param {number} at - Alpha阈值
+ * @returns {Object} 质心坐标 {cx, cy}
+ */
 function getContentCenter(f, at) {
   if (!at) at = parseInt(document.getElementById('alphaTh')?.value) || 10;
-  const alpha = getAlpha(); const w = _aW;
-  const ix = Math.max(0, Math.round(f.x)), iy = Math.max(0, Math.round(f.y));
-  const iw = Math.min(Math.round(f.w), w - ix), ih = Math.min(Math.round(f.h), _aH - iy);
+  const alpha = getAlpha();
+  const w = _aW;
+  const ix = Math.max(0, Math.round(f.x));
+  const iy = Math.max(0, Math.round(f.y));
+  const iw = Math.min(Math.round(f.w), w - ix);
+  const ih = Math.min(Math.round(f.h), _aH - iy);
+  
   if (iw <= 0 || ih <= 0) return { cx: f.w / 2, cy: f.h / 2 };
 
   const totalPixels = iw * ih;
+  // 根据像素数量动态调整采样步长
   const step = totalPixels > 10000 ? Math.ceil(Math.sqrt(totalPixels / 10000)) : 1;
 
   let sx = 0, sy = 0, total = 0;
+  
+  // 优化循环，减少计算开销
+  const startY = iy;
+  const startX = ix;
+  
   for (let dy = 0; dy < ih; dy += step) {
+    const y = startY + dy;
+    const rowOffset = y * w;
+    
     for (let dx = 0; dx < iw; dx += step) {
-      const a = alpha[(iy + dy) * w + (ix + dx)];
-      if (a > at) { sx += dx * a; sy += dy * a; total += a; }
+      const x = startX + dx;
+      const a = alpha[rowOffset + x];
+      
+      if (a > at) {
+        sx += dx * a;
+        sy += dy * a;
+        total += a;
+      }
     }
   }
+  
   if (total === 0) return { cx: iw / 2, cy: ih / 2 };
+  
   return { cx: sx / total, cy: sy / total };
 }
 
@@ -1279,6 +1529,9 @@ function renderOptAnchorPreview() {
   const c = box.querySelector('canvas');
   const ctx = c.getContext('2d');
   ctx.imageSmoothingEnabled = false;
+  ctx.mozImageSmoothingEnabled = false;
+  ctx.webkitImageSmoothingEnabled = false;
+  ctx.msImageSmoothingEnabled = false;
   ctx.drawImage(srcImg, f.x, f.y, f.w, f.h, 0, 0, cw, ch);
 
   // Draw anchor overlay with reference lines
@@ -1381,145 +1634,251 @@ function checkFrameIntegrity(f, at) {
 
 function runOptimize() {
   try {
-    if (!srcImg) { toast('请先加载图片'); return; }
-    invalidateAlpha();
-    const scope = document.getElementById('optScope').value;
-    const at = parseInt(document.getElementById('optAlpha').value) || 10;
-    const anchorX = document.getElementById('optAnchorX').value;
-    const anchorY = document.getElementById('optAnchorY').value;
-
-    let targets = scope === 'all' ? [...frames] : scope === 'manual' ? frames.filter(f => f.manual) : frames.filter(f => f.selected);
-    if (!targets.length) { toast('没有符合条件的帧'); return; }
-
-    // Backup original frames
-    optBackup = targets.map(f => ({ id: f.id, x: f.x, y: f.y, w: f.w, h: f.h }));
-
-    // Step 1: Check integrity
-    let clippedCount = 0, contaminatedCount = 0;
-    const issues = [];
-    for (const f of targets) {
-      const check = checkFrameIntegrity(f, at);
-      if (check.clipped) { clippedCount++; }
-      if (check.contaminated) { contaminatedCount++; }
-    }
-    if (clippedCount > 0) issues.push(`<span style="color:var(--yellow);">⚠️ ${clippedCount} 帧内容贴边（可能被截断）</span>`);
-    if (contaminatedCount > 0) issues.push(`<span style="color:var(--red);">⚠️ ${contaminatedCount} 帧可能混入相邻帧内容</span>`);
-
-    // Step 2: Trim transparent edges
-    const trimmedData = [];
-    let trimmed = 0;
-    for (const f of targets) {
-      const origW = f.w, origH = f.h;
-      const tr = trimAlpha(f, at);
-      if (tr) {
-        trimmedData.push({ f, tr, origW, origH });
-        trimmed++;
-      } else {
-        trimmedData.push({ f, tr: { x: f.x, y: f.y, w: f.w, h: f.h }, origW: f.w, origH: f.h });
+    // 检查必要的DOM元素
+    const requiredElements = ['optScope', 'optAlpha', 'optAnchorX', 'optAnchorY', 'optStep1', 'optStep2', 'optIssues', 'optStats', 'optStep2Anchor'];
+    for (const id of requiredElements) {
+      if (!document.getElementById(id)) {
+        throw new Error('缺少必要的DOM元素: ' + id);
       }
     }
+    
+    if (!srcImg) {
+      toast('请先加载图片');
+      return;
+    }
+    
+    if (frames.length === 0) {
+      toast('没有帧可优化');
+      return;
+    }
+    
+    invalidateAlpha();
+    
+    // 获取和验证参数
+    const scope = document.getElementById('optScope').value || 'selected';
+    const at = parseInt(document.getElementById('optAlpha').value) || 10;
+    const anchorX = document.getElementById('optAnchorX').value || 'center';
+    const anchorY = document.getElementById('optAnchorY').value || 'center';
 
-    // Step 4: Unified size (global max to ensure all frames same size)
-    // Add 4px padding on each side as safety margin to prevent any edge clipping
+    // 验证锚点模式
+    const validAnchorModes = ['core', 'centroid', 'manual', 'center', 'bottom', 'top'];
+    if (!validAnchorModes.includes(anchorX)) {
+      toast('无效的水平锚点模式');
+      return;
+    }
+    if (!validAnchorModes.includes(anchorY)) {
+      toast('无效的垂直锚点模式');
+      return;
+    }
+
+    let targets = [];
+    try {
+      targets = scope === 'all' ? [...frames] : 
+                scope === 'manual' ? frames.filter(f => f.manual) : 
+                frames.filter(f => f.selected);
+    } catch (error) {
+      console.error('过滤帧时出错:', error);
+      toast('过滤帧时出错，请重试');
+      return;
+    }
+    
+    if (!targets.length) {
+      toast('没有符合条件的帧');
+      return;
+    }
+
+    // 备份原始帧
+    try {
+      optBackup = targets.map(f => ({
+        id: f.id, 
+        x: f.x, 
+        y: f.y, 
+        w: f.w, 
+        h: f.h 
+      }));
+    } catch (error) {
+      console.error('备份帧数据时出错:', error);
+      toast('备份帧数据时出错，请重试');
+      return;
+    }
+
+    // 步骤1: 检查完整性
+    let clippedCount = 0, contaminatedCount = 0;
+    const issues = [];
+    try {
+      for (const f of targets) {
+        const check = checkFrameIntegrity(f, at);
+        if (check.clipped) { clippedCount++; }
+        if (check.contaminated) { contaminatedCount++; }
+      }
+      if (clippedCount > 0) {
+        issues.push(`<span style="color:var(--yellow);">⚠️ ${clippedCount} 帧内容贴边（可能被截断）</span>`);
+      }
+      if (contaminatedCount > 0) {
+        issues.push(`<span style="color:var(--red);">⚠️ ${contaminatedCount} 帧可能混入相邻帧内容</span>`);
+      }
+    } catch (error) {
+      console.error('检查帧完整性时出错:', error);
+      issues.push(`<span style="color:var(--yellow);">⚠️ 帧完整性检查出错</span>`);
+    }
+
+    // 步骤2: 裁剪透明边缘
+    const trimmedData = [];
+    let trimmed = 0;
+    try {
+      for (const f of targets) {
+        const origW = f.w, origH = f.h;
+        const tr = trimAlpha(f, at);
+        if (tr) {
+          trimmedData.push({ f, tr, origW, origH });
+          trimmed++;
+        } else {
+          trimmedData.push({ f, tr: { x: f.x, y: f.y, w: f.w, h: f.h }, origW: f.w, origH: f.h });
+        }
+      }
+    } catch (error) {
+      console.error('裁剪透明边缘时出错:', error);
+      toast('裁剪透明边缘时出错，请重试');
+      return;
+    }
+
+    // 步骤4: 统一尺寸
     const PAD = 4;
-    const uw = Math.max(...trimmedData.map(t => Math.max(t.tr.w, t.origW))) + PAD * 2;
-    const uh = Math.max(...trimmedData.map(t => Math.max(t.tr.h, t.origH))) + PAD * 2;
+    let uw, uh;
+    try {
+      uw = Math.max(...trimmedData.map(t => Math.max(t.tr.w, t.origW))) + PAD * 2;
+      uh = Math.max(...trimmedData.map(t => Math.max(t.tr.h, t.origH))) + PAD * 2;
+      
+      // 检查尺寸合理性
+      if (uw === PAD * 2 || uh === PAD * 2) {
+        throw new Error('计算的统一尺寸无效');
+      }
+    } catch (error) {
+      console.error('计算统一尺寸时出错:', error);
+      toast('计算统一尺寸时出错，请重试');
+      return;
+    }
 
-    // Step 5: Compute content centers for all frames using per-axis anchor modes
-    const centroids = trimmedData.map(t => computeCenter(t.tr, anchorX, anchorY, at));
+    // 步骤5: 计算所有帧的内容中心
+    let centroids;
+    try {
+      centroids = trimmedData.map(t => computeCenter(t.tr, anchorX, anchorY, at));
+    } catch (error) {
+      console.error('计算内容中心时出错:', error);
+      toast('计算内容中心时出错，请重试');
+      return;
+    }
 
-    // Step 6: Compute offsets for all frames
+    // 步骤6: 计算所有帧的偏移量
     const offsets = [];
-    for (let i = 0; i < trimmedData.length; i++) {
-      const t = trimmedData[i];
-      const cc = centroids[i];
-      let ox, oy;
+    try {
+      for (let i = 0; i < trimmedData.length; i++) {
+        const t = trimmedData[i];
+        const cc = centroids[i];
+        let ox, oy;
 
-      if (anchorX === 'core' || anchorX === 'centroid') {
-        ox = Math.round(uw / 2 - cc.cx);
-      } else if (anchorX === 'manual') {
-        const anc = t.f.anchor || manualAnchor;
-        ox = anc ? Math.round(uw / 2 - anc.cx) : Math.round(uw / 2 - cc.cx);
-      } else if (anchorX === 'center') {
-        ox = Math.round((uw - t.tr.w) / 2);
-      } else { ox = 0; }
+        if (anchorX === 'core' || anchorX === 'centroid') {
+          ox = Math.round(uw / 2 - cc.cx);
+        } else if (anchorX === 'manual') {
+          const anc = t.f.anchor || manualAnchor;
+          ox = anc ? Math.round(uw / 2 - anc.cx) : Math.round(uw / 2 - cc.cx);
+        } else if (anchorX === 'center') {
+          ox = Math.round((uw - t.tr.w) / 2);
+        } else { ox = 0; }
 
-      if (anchorY === 'bottom') {
-        oy = uh - t.tr.h;
-      } else if (anchorY === 'core' || anchorY === 'centroid') {
-        oy = Math.round(uh / 2 - cc.cy);
-      } else if (anchorY === 'manual') {
-        const anc = t.f.anchor || manualAnchor;
-        oy = anc ? Math.round(uh / 2 - anc.cy) : Math.round(uh / 2 - cc.cy);
-      } else if (anchorY === 'center') {
-        oy = Math.round((uh - t.tr.h) / 2);
-      } else { oy = 0; }
+        if (anchorY === 'bottom') {
+          oy = uh - t.tr.h;
+        } else if (anchorY === 'core' || anchorY === 'centroid') {
+          oy = Math.round(uh / 2 - cc.cy);
+        } else if (anchorY === 'manual') {
+          const anc = t.f.anchor || manualAnchor;
+          oy = anc ? Math.round(uh / 2 - anc.cy) : Math.round(uh / 2 - cc.cy);
+        } else if (anchorY === 'center') {
+          oy = Math.round((uh - t.tr.h) / 2);
+        } else { oy = 0; }
 
-      offsets.push({ ox, oy });
+        offsets.push({ ox, oy });
+      }
+    } catch (error) {
+      console.error('计算偏移量时出错:', error);
+      toast('计算偏移量时出错，请重试');
+      return;
     }
 
-    // Step 6b: Check if any frame content exceeds the unified canvas bounds.
-    // If so, expand the canvas to fit all content (preserving alignment = no jitter).
+    // 步骤6b: 检查是否需要扩展画布
     let needUW = uw, needUH = uh;
-    for (let i = 0; i < trimmedData.length; i++) {
-      const t = trimmedData[i];
-      const { ox, oy } = offsets[i];
-      if (ox < 0) needUW = Math.max(needUW, uw - ox); // content extends left
-      if (oy < 0) needUH = Math.max(needUH, uh - oy); // content extends top
-      if (ox + t.tr.w > uw) needUW = Math.max(needUW, ox + t.tr.w); // extends right
-      if (oy + t.tr.h > uh) needUH = Math.max(needUH, oy + t.tr.h); // extends bottom
+    try {
+      for (let i = 0; i < trimmedData.length; i++) {
+        const t = trimmedData[i];
+        const { ox, oy } = offsets[i];
+        if (ox < 0) needUW = Math.max(needUW, uw - ox);
+        if (oy < 0) needUH = Math.max(needUH, uh - oy);
+        if (ox + t.tr.w > uw) needUW = Math.max(needUW, ox + t.tr.w);
+        if (oy + t.tr.h > uh) needUH = Math.max(needUH, oy + t.tr.h);
+      }
+    } catch (error) {
+      console.error('检查画布边界时出错:', error);
+      // 继续使用原始尺寸
     }
 
-    // If canvas needs expanding, recalculate offsets with the new size.
-    // The anchor point stays at the center of the NEW canvas, so all offsets
-    // shift by the same delta → no relative movement → no jitter.
+    // 计算最终尺寸和偏移量
     const finalUW = needUW, finalUH = needUH;
     const expandDX = Math.round((finalUW - uw) / 2);
     const expandDY = Math.round((finalUH - uh) / 2);
 
+    // 生成预览数据
     optPreviewData = [];
-    for (let i = 0; i < trimmedData.length; i++) {
-      const t = trimmedData[i];
-      const { ox, oy } = offsets[i];
-      // Shift offset by half the expansion (anchor stays centered)
-      const offsetX = ox + expandDX;
-      const offsetY = oy + expandDY;
+    try {
+      for (let i = 0; i < trimmedData.length; i++) {
+        const t = trimmedData[i];
+        const { ox, oy } = offsets[i];
+        const offsetX = ox + expandDX;
+        const offsetY = oy + expandDY;
 
-      optPreviewData.push({
-        id: t.f.id,
-        // Original frame coordinates (NEVER modify these)
-        origX: t.f.x, origY: t.f.y, origW: t.f.w, origH: t.f.h,
-        // Trimmed content coordinates (actual content bounding box on source image)
-        srcX: t.tr.x, srcY: t.tr.y, srcW: t.tr.w, srcH: t.tr.h,
-        // Unified canvas size (may be expanded to prevent clipping)
-        unifiedW: finalUW, unifiedH: finalUH,
-        // Where to draw the trimmed content within the unified canvas
-        offsetX, offsetY
-      });
+        optPreviewData.push({
+          id: t.f.id,
+          origX: t.f.x, origY: t.f.y, origW: t.f.w, origH: t.f.h,
+          srcX: t.tr.x, srcY: t.tr.y, srcW: t.tr.w, srcH: t.tr.h,
+          unifiedW: finalUW, unifiedH: finalUH,
+          offsetX, offsetY
+        });
+      }
+    } catch (error) {
+      console.error('生成预览数据时出错:', error);
+      toast('生成预览数据时出错，请重试');
+      return;
     }
 
-    // Show results
-    document.getElementById('optStep1').style.display = 'none';
-    document.getElementById('optStep2').style.display = 'block';
-    document.getElementById('optIssues').innerHTML = issues.length ? issues.join('<br>') : '<span style="color:var(--green);">✅ 所有帧完整性检查通过</span>';
-    document.getElementById('optStats').innerHTML = `统一尺寸: ${uw}×${uh} · 水平: ${anchorX} · 垂直: ${anchorY} · 裁剪: ${trimmed}`;
+    // 显示结果
+    try {
+      document.getElementById('optStep1').style.display = 'none';
+      document.getElementById('optStep2').style.display = 'block';
+      document.getElementById('optIssues').innerHTML = issues.length ? issues.join('<br>') : '<span style="color:var(--green);">✅ 所有帧完整性检查通过</span>';
+      document.getElementById('optStats').innerHTML = `统一尺寸: ${uw}×${uh} · 水平: ${anchorX} · 垂直: ${anchorY} · 裁剪: ${trimmed}`;
 
-    // Cache trimmed data for recalculation when anchors change
-    optTrimmedData = trimmedData;
+      // 缓存裁剪数据
+      optTrimmedData = trimmedData;
 
-    // Show anchor tuning panel in Step 2 if manual mode
-    const needManual = anchorX === 'manual' || anchorY === 'manual';
-    document.getElementById('optStep2Anchor').style.display = needManual ? 'block' : 'none';
-    if (needManual) {
-      anchorPreviewIdx = 0;
-      renderOptAnchorPreview2();
+      // 显示手动锚点调整面板
+      const needManual = anchorX === 'manual' || anchorY === 'manual';
+      document.getElementById('optStep2Anchor').style.display = needManual ? 'block' : 'none';
+      if (needManual) {
+        anchorPreviewIdx = 0;
+        renderOptAnchorPreview2();
+      }
+
+      // 开始预览动画
+      optAnimIdx = 0;
+      startOptAnim();
+    } catch (error) {
+      console.error('更新UI时出错:', error);
+      toast('更新界面时出错，请重试');
     }
 
-    // Start preview animation
-    optAnimIdx = 0;
-    startOptAnim();
-
-  } catch(e) { toast('优化出错: ' + e.message); }
+  } catch (error) {
+    console.error('优化过程中出错:', error);
+    toast('优化出错: ' + error.message);
+  }
 }
 
 // Preview animation with optimized data
@@ -1543,6 +1902,17 @@ function startOptAnim() {
   offCvs.width = uw;
   offCvs.height = uh;
   const offCtx = offCvs.getContext('2d');
+  // Disable image smoothing for offscreen canvas
+  offCtx.imageSmoothingEnabled = false;
+  offCtx.mozImageSmoothingEnabled = false;
+  offCtx.webkitImageSmoothingEnabled = false;
+  offCtx.msImageSmoothingEnabled = false;
+
+  // Disable image smoothing for main preview canvas
+  ctx.imageSmoothingEnabled = false;
+  ctx.mozImageSmoothingEnabled = false;
+  ctx.webkitImageSmoothingEnabled = false;
+  ctx.msImageSmoothingEnabled = false;
 
   const fps = parseInt(document.getElementById('optFpsRange').value) || 8;
   const total = optPreviewData.length;
@@ -1556,11 +1926,9 @@ function startOptAnim() {
       offCtx.putImageData(d._interpImgData, 0, 0);
     } else {
       offCtx.clearRect(0, 0, uw, uh);
-      offCtx.imageSmoothingEnabled = false;
       offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
     }
     // Step 2: Draw the composited frame onto the preview canvas
-    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, c.width, c.height);
     ctx.drawImage(offCvs, 0, 0, uw, uh, 0, 0, c.width, c.height);
     // Update frame indicator
@@ -1570,8 +1938,13 @@ function startOptAnim() {
 }
 
 function stopOptAnim() {
-  if (optAnimTimer) { clearInterval(optAnimTimer); optAnimTimer = null; }
-  optAnimPlaying = false;
+  if (typeof optAnimTimer !== 'undefined' && optAnimTimer) { 
+    clearInterval(optAnimTimer); 
+    optAnimTimer = null; 
+  }
+  if (typeof optAnimPlaying !== 'undefined') {
+    optAnimPlaying = false;
+  }
   const btn = document.getElementById('btnOptAnim');
   if (btn) btn.textContent = '▶';
 }
@@ -1597,14 +1970,22 @@ function optStepFrame(dir) {
   const offCvs = document.createElement('canvas');
   offCvs.width = uw; offCvs.height = uh;
   const offCtx = offCvs.getContext('2d');
+  // Disable image smoothing for offscreen canvas
+  offCtx.imageSmoothingEnabled = false;
+  offCtx.mozImageSmoothingEnabled = false;
+  offCtx.webkitImageSmoothingEnabled = false;
+  offCtx.msImageSmoothingEnabled = false;
   offCtx.clearRect(0, 0, uw, uh);
   if (d._isInterp && d._interpImgData) {
     offCtx.putImageData(d._interpImgData, 0, 0);
   } else {
-    offCtx.imageSmoothingEnabled = false;
     offCtx.drawImage(srcImg, d.srcX, d.srcY, d.srcW, d.srcH, d.offsetX, d.offsetY, d.srcW, d.srcH);
   }
+  // Disable image smoothing for main preview canvas
   ctx.imageSmoothingEnabled = false;
+  ctx.mozImageSmoothingEnabled = false;
+  ctx.webkitImageSmoothingEnabled = false;
+  ctx.msImageSmoothingEnabled = false;
   ctx.clearRect(0, 0, c.width, c.height);
   ctx.drawImage(offCvs, 0, 0, uw, uh, 0, 0, c.width, c.height);
   const indicator = document.getElementById('optFrameIndicator');
@@ -1727,6 +2108,9 @@ function renderOptAnchorPreview2() {
   const c = box.querySelector('canvas');
   const ctx = c.getContext('2d');
   ctx.imageSmoothingEnabled = false;
+  ctx.mozImageSmoothingEnabled = false;
+  ctx.webkitImageSmoothingEnabled = false;
+  ctx.msImageSmoothingEnabled = false;
   ctx.drawImage(srcImg, f.x, f.y, f.w, f.h, 0, 0, cw, ch);
 
   // Draw anchor overlay with reference lines
@@ -1896,6 +2280,13 @@ function doExportOptimized() {
     c.width = cols * (uw + pad) - pad;
     c.height = rows * (uh + pad) - pad;
     const ctx = c.getContext('2d');
+    
+    // Disable image smoothing
+    ctx.imageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+    ctx.msImageSmoothingEnabled = false;
+    
     sf.forEach((f, i) => {
       const dx = (i % cols) * (uw + pad);
       const dy = Math.floor(i / cols) * (uh + pad);
@@ -1916,6 +2307,13 @@ function doExportOptimized() {
       c.width = rfs.length * (uw + pad) - pad;
       c.height = uh;
       const ctx = c.getContext('2d');
+      
+      // Disable image smoothing
+      ctx.imageSmoothingEnabled = false;
+      ctx.mozImageSmoothingEnabled = false;
+      ctx.webkitImageSmoothingEnabled = false;
+      ctx.msImageSmoothingEnabled = false;
+      
       rfs.forEach((f, i) => {
         const dx = i * (uw + pad);
         ctx.drawImage(srcImg, f.x, f.y, f.w, f.h, dx + f.offsetX, f.offsetY, f.w, f.h);
@@ -1943,7 +2341,15 @@ function doExportZip() {
   sf.forEach((f, i) => {
     const c = document.createElement('canvas');
     c.width = f.unifiedW; c.height = f.unifiedH;
-    c.getContext('2d').drawImage(srcImg, f.x, f.y, f.w, f.h, f.offsetX, f.offsetY, f.w, f.h);
+    const ctx = c.getContext('2d');
+    
+    // Disable image smoothing
+    ctx.imageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+    ctx.msImageSmoothingEnabled = false;
+    
+    ctx.drawImage(srcImg, f.x, f.y, f.w, f.h, f.offsetX, f.offsetY, f.w, f.h);
     ff.file(`${name}_f${i + 1}.png`, c.toDataURL('image/png').split(',')[1], { base64: true });
   });
 
@@ -1954,6 +2360,13 @@ function doExportZip() {
   sc.width = cols * (uw + pad) - pad;
   sc.height = rows * (uh + pad) - pad;
   const sctx = sc.getContext('2d');
+  
+  // Disable image smoothing
+  sctx.imageSmoothingEnabled = false;
+  sctx.mozImageSmoothingEnabled = false;
+  sctx.webkitImageSmoothingEnabled = false;
+  sctx.msImageSmoothingEnabled = false;
+  
   sf.forEach((f, i) => {
     const dx = (i % cols) * (uw + pad);
     const dy = Math.floor(i / cols) * (uh + pad);
@@ -2178,13 +2591,22 @@ function updateList() {
   // Thumbnails
   if (srcImg) {
     const tc = document.createElement('canvas'); tc.width = srcImg.width; tc.height = srcImg.height;
-    tc.getContext('2d').drawImage(srcImg, 0, 0);
+    const tctx = tc.getContext('2d');
+    tctx.imageSmoothingEnabled = false;
+    tctx.mozImageSmoothingEnabled = false;
+    tctx.webkitImageSmoothingEnabled = false;
+    tctx.msImageSmoothingEnabled = false;
+    tctx.drawImage(srcImg, 0, 0);
     box.querySelectorAll('canvas[data-fid]').forEach(c => {
       const f = frames.find(fr => fr.id === +c.dataset.fid); if (!f) return;
       const s = Math.min(28/f.w, 28/f.h, 2);
       c.width = Math.ceil(f.w*s); c.height = Math.ceil(f.h*s);
-      c.getContext('2d').imageSmoothingEnabled = false;
-      c.getContext('2d').drawImage(tc, f.x, f.y, f.w, f.h, 0, 0, c.width, c.height);
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.mozImageSmoothingEnabled = false;
+      ctx.webkitImageSmoothingEnabled = false;
+      ctx.msImageSmoothingEnabled = false;
+      ctx.drawImage(tc, f.x, f.y, f.w, f.h, 0, 0, c.width, c.height);
     });
   }
 }
@@ -2206,6 +2628,9 @@ function updatePreview() {
   box.innerHTML = `<canvas id="previewCvs" width="${cw}" height="${ch}" style="image-rendering:pixelated;${isManualMode?'cursor:crosshair;':''}"></canvas>`;
   const c = box.querySelector('canvas').getContext('2d');
   c.imageSmoothingEnabled = false;
+  c.mozImageSmoothingEnabled = false;
+  c.webkitImageSmoothingEnabled = false;
+  c.msImageSmoothingEnabled = false;
   c.drawImage(srcImg, f.x, f.y, f.w, f.h, 0, 0, cw, ch);
 
   // Draw anchor crosshair if in manual mode
@@ -2289,17 +2714,26 @@ function playAnim() {
   offCvs.width = uw;
   offCvs.height = uh;
   const offCtx = offCvs.getContext('2d');
+  // Disable image smoothing for offscreen canvas
+  offCtx.imageSmoothingEnabled = false;
+  offCtx.mozImageSmoothingEnabled = false;
+  offCtx.webkitImageSmoothingEnabled = false;
+  offCtx.msImageSmoothingEnabled = false;
+
+  // Disable image smoothing for main animation canvas
+  ctx.imageSmoothingEnabled = false;
+  ctx.mozImageSmoothingEnabled = false;
+  ctx.webkitImageSmoothingEnabled = false;
+  ctx.msImageSmoothingEnabled = false;
 
   animTimer = setInterval(() => {
     const idx = animIdx % sf.length;
     const f = sf[idx];
-    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, c.width, c.height);
 
     if (hasUnified && f.unifiedW && f.unifiedH) {
       // Use pre-computed offset from optimization
       offCtx.clearRect(0, 0, uw, uh);
-      offCtx.imageSmoothingEnabled = false;
       offCtx.drawImage(srcImg, f.x, f.y, f.w, f.h, f.offsetX, f.offsetY, f.w, f.h);
       ctx.drawImage(offCvs, 0, 0, uw, uh, 0, 0, c.width, c.height);
     } else {
@@ -2330,7 +2764,28 @@ function showExportModal(mode) {
     t.textContent = '📦 导出精灵表';
     b.innerHTML = `<p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">${sf.length} 帧导出为标准精灵表</p>
       <div class="form-row"><div class="form-field"><label>模式</label><select id="exMode"><option value="perRow">每行一张</option><option value="single">合并一张</option></select></div>
-      <div class="form-field"><label>间距</label><input type="number" id="exPad" value="${document.getElementById('framePad').value}" min="0"></div></div>`;
+      <div class="form-field"><label>间距</label><input type="number" id="exPad" value="${document.getElementById('framePad').value}" min="0"></div></div>
+      <div class="form-row" id="sheetLayoutOptions" style="margin-top:8px;">
+        <div class="form-field"><label>排列方式</label><select id="exLayout"><option value="auto">自动计算</option><option value="custom">自定义行列</option></select></div>
+        <div class="form-field" id="customColsField"><label>列数</label><input type="number" id="exCols" value="${Math.ceil(Math.sqrt(sf.length))}" min="1"></div>
+        <div class="form-field" id="customRowsField"><label>行数</label><input type="number" id="exRows" value="${Math.ceil(sf.length / Math.ceil(Math.sqrt(sf.length)))}" min="1"></div>
+      </div>`;
+    // Add event listener for layout change
+    setTimeout(() => {
+      const layoutSelect = document.getElementById('exLayout');
+      const customColsField = document.getElementById('customColsField');
+      const customRowsField = document.getElementById('customRowsField');
+      
+      if (layoutSelect) {
+        layoutSelect.addEventListener('change', function() {
+          const isCustom = this.value === 'custom';
+          if (customColsField) customColsField.style.display = isCustom ? 'block' : 'none';
+          if (customRowsField) customRowsField.style.display = isCustom ? 'block' : 'none';
+        });
+        // Trigger initial state
+        layoutSelect.dispatchEvent(new Event('change'));
+      }
+    }, 100);
   } else if (mode === 'frames') {
     t.textContent = '🖼️ 导出单帧'; b.innerHTML = `<p style="font-size:12px;color:var(--text-dim);">导出 ${sf.length} 个 PNG</p>`;
   } else if (mode === 'zip') {
@@ -2367,9 +2822,33 @@ function exportSheets(sf) {
       mw = Math.max(...sf.map(f=>f.w));
       mh = Math.max(...sf.map(f=>f.h));
     }
-    const cols = Math.ceil(Math.sqrt(sf.length)), rows = Math.ceil(sf.length/cols);
+    
+    // Get layout settings
+    let cols, rows;
+    const layout = document.getElementById('exLayout')?.value || 'auto';
+    
+    if (layout === 'custom') {
+      cols = parseInt(document.getElementById('exCols')?.value) || 1;
+      rows = parseInt(document.getElementById('exRows')?.value) || 1;
+      // Ensure enough space for all frames
+      while (cols * rows < sf.length) {
+        rows++;
+      }
+    } else {
+      // Auto layout: square root
+      cols = Math.ceil(Math.sqrt(sf.length));
+      rows = Math.ceil(sf.length/cols);
+    }
+    
     const c = document.createElement('canvas'); c.width = cols*(mw+pad)-pad; c.height = rows*(mh+pad)-pad;
     const ctx = c.getContext('2d');
+    
+    // Disable image smoothing
+    ctx.imageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+    ctx.msImageSmoothingEnabled = false;
+    
     sf.forEach((f,i) => {
       const dx = (i%cols)*(mw+pad), dy = Math.floor(i/cols)*(mh+pad);
       if (hasUnified && f.unifiedW && f.unifiedH) {
@@ -2394,6 +2873,13 @@ function exportSheets(sf) {
       }
       const c = document.createElement('canvas'); c.width = rfs.length*(mw+pad)-pad; c.height = rh;
       const ctx = c.getContext('2d');
+      
+      // Disable image smoothing
+      ctx.imageSmoothingEnabled = false;
+      ctx.mozImageSmoothingEnabled = false;
+      ctx.webkitImageSmoothingEnabled = false;
+      ctx.msImageSmoothingEnabled = false;
+      
       rfs.forEach((f,i) => {
         const dx = i*(mw+pad);
         if (hasUnified && f.unifiedW && f.unifiedH) {
@@ -2416,10 +2902,25 @@ function exportFrames(sf) {
       // Export as unified-size frame with content at correct offset
       c.width = f.unifiedW; c.height = f.unifiedH;
       const ctx = c.getContext('2d');
+      
+      // Disable image smoothing
+      ctx.imageSmoothingEnabled = false;
+      ctx.mozImageSmoothingEnabled = false;
+      ctx.webkitImageSmoothingEnabled = false;
+      ctx.msImageSmoothingEnabled = false;
+      
       ctx.drawImage(srcImg, f.x, f.y, f.w, f.h, f.offsetX, f.offsetY, f.w, f.h);
     } else {
       c.width = f.w; c.height = f.h;
-      c.getContext('2d').drawImage(srcImg, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+      const ctx = c.getContext('2d');
+      
+      // Disable image smoothing
+      ctx.imageSmoothingEnabled = false;
+      ctx.mozImageSmoothingEnabled = false;
+      ctx.webkitImageSmoothingEnabled = false;
+      ctx.msImageSmoothingEnabled = false;
+      
+      ctx.drawImage(srcImg, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
     }
     dlCanvas(c, `frame_${f.row+1}_${f.col+1}.png`);
   });
@@ -2434,10 +2935,26 @@ function exportZip(sf) {
     const c = document.createElement('canvas');
     if (hasUnified && f.unifiedW && f.unifiedH) {
       c.width = f.unifiedW; c.height = f.unifiedH;
-      c.getContext('2d').drawImage(srcImg, f.x, f.y, f.w, f.h, f.offsetX, f.offsetY, f.w, f.h);
+      const ctx = c.getContext('2d');
+      
+      // Disable image smoothing
+      ctx.imageSmoothingEnabled = false;
+      ctx.mozImageSmoothingEnabled = false;
+      ctx.webkitImageSmoothingEnabled = false;
+      ctx.msImageSmoothingEnabled = false;
+      
+      ctx.drawImage(srcImg, f.x, f.y, f.w, f.h, f.offsetX, f.offsetY, f.w, f.h);
     } else {
       c.width = f.w; c.height = f.h;
-      c.getContext('2d').drawImage(srcImg, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+      const ctx = c.getContext('2d');
+      
+      // Disable image smoothing
+      ctx.imageSmoothingEnabled = false;
+      ctx.mozImageSmoothingEnabled = false;
+      ctx.webkitImageSmoothingEnabled = false;
+      ctx.msImageSmoothingEnabled = false;
+      
+      ctx.drawImage(srcImg, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
     }
     ff.file(`frame_${f.row+1}_${f.col+1}.png`, c.toDataURL('image/png').split(',')[1], {base64:true});
   });
@@ -2453,6 +2970,13 @@ function exportZip(sf) {
       rh = Math.max(...rfs.map(f=>f.h));
     }
     const c=document.createElement('canvas');c.width=rfs.length*(mw+pad)-pad;c.height=rh;const ctx=c.getContext('2d');
+    
+    // Disable image smoothing
+    ctx.imageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+    ctx.msImageSmoothingEnabled = false;
+    
     rfs.forEach((f,i)=>{
       const dx=i*(mw+pad);
       if (hasUnified && f.unifiedW && f.unifiedH) {

@@ -7,30 +7,66 @@
 <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
-<div class="app">
+<!-- 功能选择初始页面 -->
+<div id="welcomePage" class="welcome-page">
+  <div class="welcome-container">
+    <div class="welcome-header">
+      <div class="welcome-logo">🎨</div>
+      <h1>SpriteForge</h1>
+      <p class="welcome-subtitle">专业精灵表编辑工具</p>
+    </div>
+    
+    <div class="feature-grid">
+      <div class="feature-card" onclick="startFrameExtract()">
+        <div class="feature-icon">📤</div>
+        <h3>帧提取</h3>
+        <p>从多个精灵表中提取帧并重组为新的精灵表</p>
+      </div>
+      
+      <div class="feature-card" onclick="startSpriteEdit()">
+        <div class="feature-icon">✏️</div>
+        <h3>精灵编辑</h3>
+        <p>手动编辑和管理精灵帧，支持背景消除</p>
+      </div>
+    </div>
+    
+    <div class="welcome-footer">
+      <p>轻量级在线精灵表编辑器 - 无需安装，打开即用</p>
+    </div>
+  </div>
+</div>
+
+<!-- 主编辑界面 (默认隐藏) -->
+<div id="editPage" class="app">
   <!-- Toolbar -->
   <div class="toolbar">
-    <span class="brand">SpriteForge</span>
-    <button class="btn btn-accent" onclick="loadImage()">📂 加载图片</button>
-    <div id="imageTabs" style="display:flex;gap:2px;overflow-x:auto;max-width:300px;"></div>
-    <button class="btn" onclick="detectFrames()" id="btnDetect" disabled>🔍 自动检测</button>
-    <div class="sep"></div>
-    <button class="btn" onclick="selectAll()">全选</button>
-    <button class="btn" onclick="deselectAll()">取消全选</button>
-    <button class="btn" onclick="invertSelection()">反选</button>
-    <div class="sep"></div>
-    <button class="btn" onclick="showOptimizeModal()" id="btnOptimize" disabled>🎯 帧对齐与导出</button>
-    <div class="sep"></div>
-    <button class="btn" onclick="showInterpModal()" id="btnInterp" disabled>🎞️ 插帧</button>
-    <div class="sep"></div>
-    <button class="btn" onclick="showExportModal('sheets')">📦 导出精灵表</button>
-    <button class="btn" onclick="showExportModal('frames')">🖼️ 导出单帧</button>
-    <button class="btn" onclick="showExportModal('zip')">📁 ZIP</button>
-    <button class="btn" onclick="showExportModal('json')">📋 JSON</button>
-    <div class="sep"></div>
-    <button class="btn btn-accent" onclick="showExtractModal()">📤 帧提取</button>
-    <div class="sep"></div>
-    <button class="btn btn-danger" onclick="deleteSelected()" id="btnDelete" disabled>🗑️ 删除选中</button>
+    <div class="toolbar-group">
+      <span class="brand">SpriteForge</span>
+      <button class="btn" onclick="backToWelcome()">🏠 首页</button>
+    </div>
+    <div class="toolbar-group">
+      <button class="btn btn-accent" onclick="loadImage()">📂 加载图片</button>
+      <div id="imageTabs" style="display:flex;gap:4px;overflow-x:auto;max-width:400px;"></div>
+      <button class="btn" onclick="detectFrames()" id="btnDetect" disabled>🔍 自动检测</button>
+    </div>
+    <div class="toolbar-group">
+      <button class="btn" onclick="selectAll()">全选</button>
+      <button class="btn" onclick="deselectAll()">取消全选</button>
+      <button class="btn" onclick="invertSelection()">反选</button>
+    </div>
+    <div class="toolbar-group">
+      <button class="btn" onclick="showOptimizeModal()" id="btnOptimize" disabled>🎯 帧对齐</button>
+      <button class="btn" onclick="showInterpModal()" id="btnInterp" disabled>🎞️ 插帧</button>
+    </div>
+    <div class="toolbar-group">
+      <button class="btn" onclick="showExportModal('sheets')">📦 导出精灵表</button>
+      <button class="btn" onclick="showExportModal('frames')">🖼️ 导出单帧</button>
+      <button class="btn" onclick="showExportModal('zip')">📁 ZIP</button>
+      <button class="btn" onclick="showExportModal('json')">📋 JSON</button>
+    </div>
+    <div class="toolbar-group">
+      <button class="btn btn-danger" onclick="deleteSelected()" id="btnDelete" disabled>🗑️ 删除选中</button>
+    </div>
     <span style="margin-left:auto;font-size:11px;color:var(--text-dim);" id="imgInfo"></span>
   </div>
 
@@ -167,6 +203,79 @@
           <div><kbd style="background:var(--bg-active);padding:1px 4px;border-radius:3px;font-size:10px;">Ctrl+A</kbd> 全选</div>
           <div><kbd style="background:var(--bg-active);padding:1px 4px;border-radius:3px;font-size:10px;">Space</kbd> 播放/暂停</div>
           <div><kbd style="background:var(--bg-active);padding:1px 4px;border-radius:3px;font-size:10px;">Esc</kbd> 取消操作</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 全屏帧提取界面 (默认隐藏) -->
+<div id="extractPage" class="extract-page">
+  <div class="extract-header">
+    <div class="extract-title">
+      <h1>📤 帧提取与重组</h1>
+      <p>从多个精灵表中提取帧并重组为新的精灵表</p>
+    </div>
+    <div class="extract-controls">
+      <button class="btn" onclick="backToWelcome()">🏠 首页</button>
+    </div>
+  </div>
+  <div class="extract-body">
+    <div class="extract-main">
+      <!-- Source Area (Left) -->
+      <div class="extract-source">
+        <div class="extract-section-header">
+          <h3>待提取区域</h3>
+          <div class="extract-section-controls">
+            <button class="btn btn-sm" onclick="loadExtractSource()">📂 加载图片</button>
+            <button class="btn btn-sm" onclick="clearExtractSources()">🗑️ 清空</button>
+          </div>
+        </div>
+        <div id="extractSourceArea" class="extract-source-area">
+          <div class="extract-empty">
+            加载图片到待提取区域
+          </div>
+        </div>
+      </div>
+      
+      <!-- Target Area (Right) -->
+      <div class="extract-target">
+        <div class="extract-section-header">
+          <h3>放置区域</h3>
+          <div class="extract-section-controls">
+            <button class="btn btn-sm" onclick="clearExtractTarget()">🗑️ 清空</button>
+            <button class="btn btn-sm" onclick="autoArrangeExtractTarget()">🔄 自动排列</button>
+            <button class="btn btn-sm btn-accent" onclick="createExtractSpriteSheet()">📦 创建精灵表</button>
+          </div>
+        </div>
+        <div class="extract-target-settings">
+      <div class="extract-setting-item">
+        <label>网格大小:</label>
+        <input type="number" id="gridSize" value="32" min="8" max="256" style="width:60px;padding:4px;">
+      </div>
+      <div class="extract-setting-item">
+        <label>间距:</label>
+        <input type="number" id="gridPadding" value="2" min="0" max="16" style="width:60px;padding:4px;">
+      </div>
+      <div class="extract-setting-item">
+        <label>排列模式:</label>
+        <select id="arrangeMode" onchange="toggleArrangeModeOptions();">
+          <option value="flow">流式排列</option>
+          <option value="grid">宫格模式</option>
+        </select>
+      </div>
+      <div class="extract-setting-item" id="gridColsRow">
+        <label>列数:</label>
+        <input type="number" id="gridCols" value="3" min="1" style="width:60px;padding:4px;">
+      </div>
+      <div class="extract-setting-item" id="gridRowsRow">
+        <label>行数:</label>
+        <input type="number" id="gridRows" value="3" min="1" style="width:60px;padding:4px;">
+      </div>
+    </div>
+        <div id="extractTargetArea" class="extract-target-area">
+          <div id="gridOverlay" class="extract-grid-overlay"></div>
+          <div id="targetFrames" class="extract-target-frames"></div>
         </div>
       </div>
     </div>
@@ -404,6 +513,61 @@
   </div>
 </div>
 
+<!-- Extract Export Options Modal -->
+<div class="modal-bg" id="extractExportModal">
+  <div class="modal" style="width:480px;">
+    <h2>📦 导出选项</h2>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">选择如何处理提取的帧</p>
+    
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="export-option" style="padding:16px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;" onclick="selectExportOption('spriteSheet')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="font-size:24px;">📄</div>
+          <div>
+            <h3 style="margin:0 0 4px 0;font-size:14px;">导出为精灵表</h3>
+            <p style="margin:0;font-size:11px;color:var(--text-dim);">将所有帧合并为一个精灵表图片并下载</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="export-option" style="padding:16px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;" onclick="selectExportOption('frameEdit')">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="font-size:24px;">✏️</div>
+          <div>
+            <h3 style="margin:0 0 4px 0;font-size:14px;">发送到帧编辑</h3>
+            <p style="margin:0;font-size:11px;color:var(--text-dim);">将帧发送到精灵编辑页面进行进一步编辑</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn" onclick="closeModal('extractExportModal')">取消</button>
+      <button class="btn btn-accent" onclick="executeExportOption()">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- Extract Export Preview Modal -->
+<div class="modal-bg" id="extractPreviewModal">
+  <div class="modal" style="width:640px;max-height:90vh;">
+    <h2>👁️ 导出预览</h2>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">检查导出效果，确认无误后再导出</p>
+    
+    <div id="extractPreviewContainer" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;overflow:auto;max-height:400px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
+      <p style="color:var(--text-dim);font-size:12px;">正在生成预览...</p>
+    </div>
+    
+    <div id="extractPreviewInfo" style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">
+    </div>
+    
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('extractPreviewModal')">取消</button>
+      <button class="btn btn-accent" onclick="confirmExtractExport()">✅ 确认导出</button>
+    </div>
+  </div>
+</div>
+
 <!-- Context Menu -->
 <div class="ctx-menu" id="ctxMenu">
   <div class="ctx-item" onclick="ctxToggle()">✅/❌ 切换选中</div>
@@ -419,64 +583,13 @@
   <div class="ctx-item danger" onclick="ctxDelete()">🗑️ 删除</div>
 </div>
 
-<!-- Frame Extract Modal -->
-<div class="modal-bg" id="extractModal">
-  <div class="modal" style="width:90vw;max-width:1200px;height:80vh;max-height:800px;display:flex;flex-direction:column;">
-    <h2>📤 帧提取与重组</h2>
-    <div style="display:flex;flex:1;gap:20px;overflow:hidden;">
-      <!-- Source Area (Left) -->
-      <div style="flex:1;display:flex;flex-direction:column;">
-        <div style="display:flex;justify-content-between;align-items:center;margin-bottom:12px;">
-          <h3 style="margin:0;">待提取区域</h3>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-sm" onclick="loadExtractSource()">📂 加载图片</button>
-            <button class="btn btn-sm" onclick="clearExtractSources()">🗑️ 清空</button>
-          </div>
-        </div>
-        <div id="extractSourceArea" style="flex:1;overflow:auto;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
-          <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-dim);font-size:14px;">
-            加载图片到待提取区域
-          </div>
-        </div>
-      </div>
-      
-      <!-- Target Area (Right) -->
-      <div style="flex:1;display:flex;flex-direction:column;">
-        <div style="display:flex;justify-content-between;align-items:center;margin-bottom:12px;">
-          <h3 style="margin:0;">放置区域</h3>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-sm" onclick="clearExtractTarget()">🗑️ 清空</button>
-            <button class="btn btn-sm" onclick="autoArrangeExtractTarget()">🔄 自动排列</button>
-            <button class="btn btn-sm btn-accent" onclick="createExtractSpriteSheet()">📦 创建精灵表</button>
-          </div>
-        </div>
-        <div style="display:flex;gap:10px;margin-bottom:8px;">
-          <div style="display:flex;align-items:center;gap:4px;">
-            <label style="font-size:12px;">网格大小:</label>
-            <input type="number" id="gridSize" value="32" min="8" max="256" style="width:60px;padding:4px;">
-          </div>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <label style="font-size:12px;">间距:</label>
-            <input type="number" id="gridPadding" value="2" min="0" max="16" style="width:60px;padding:4px;">
-          </div>
-        </div>
-        <div id="extractTargetArea" style="flex:1;overflow:auto;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);position:relative;">
-          <div id="gridOverlay" style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;"></div>
-          <div id="targetFrames" style="position:relative;width:100%;height:100%;"></div>
-        </div>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('extractModal')">关闭</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFile(event)">
+<input type="file" id="extractFileInput" accept="image/*" multiple style="display:none;" onchange="handleExtractFile(event)">
 <script src="js/auto-save.js"></script>
-<script src="js/frame-extract.js"></script>
 <script src="js/app.js"></script>
+<script src="js/frame-extract.js"></script>
+<script src="test.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </body>
 </html>
