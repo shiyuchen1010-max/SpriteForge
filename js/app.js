@@ -281,10 +281,10 @@ function handleFile(e) {
       return;
     }
     
-    // 文件大小限制 (5MB)
-    const maxSize = 5 * 1024 * 1024;
+    // 文件大小限制 (20MB) - 支持4K分辨率图片
+    const maxSize = 20 * 1024 * 1024;
     if (f.size > maxSize) {
-      toast('图片大小不能超过 5MB');
+      toast('图片大小不能超过 20MB');
       return;
     }
     
