@@ -77,8 +77,8 @@ function handleExtractFile(e) {
     
     // 文件类型验证
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    // 文件大小限制 (5MB)
-    const maxSize = 5 * 1024 * 1024;
+    // 文件大小限制 (20MB)
+    const maxSize = 20 * 1024 * 1024;
     
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -91,7 +91,7 @@ function handleExtractFile(e) {
       
       // 验证文件大小
       if (file.size > maxSize) {
-        toast('图片大小不能超过 5MB');
+        toast('图片大小不能超过 20MB');
         continue;
       }
       
