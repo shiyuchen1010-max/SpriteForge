@@ -111,9 +111,13 @@ function handleExtractFile(e) {
                 frames: [],
                 selectedFrames: []
               });
-              // Set initial zoom to 1
-              extractZoomLevels[id] = 1;
+              // Set initial zoom to a small value to prevent layout issues
+              extractZoomLevels[id] = 0.1;
               renderExtractSources();
+              // 图片加载完成后自动缩放以适应容器
+              setTimeout(() => {
+                extractZoomFit(id);
+              }, 100);
             } catch (error) {
               console.error('添加图像到源列表时出错:', error);
               toast('添加图像时出错，请重试');
@@ -191,17 +195,17 @@ function renderExtractSources() {
         <span style="font-size:12px;font-weight:600;">${source.name}</span>
         <button class="btn btn-sm btn-danger" onclick="removeExtractSource('${source.id}')" style="padding:2px 6px;font-size:10px;">✕</button>
       </div>
-      <div id="extractImageContainer_${source.id}" style="position:relative;width:100%;min-height:350px;display:flex;align-items:center;justify-content:center;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
+      <div id="extractImageContainer_${source.id}" style="position:relative;width:100%;height:400px;background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;overflow:auto;">
         <div id="extractImageWrapper_${source.id}" style="position:relative;display:inline-block;">
           <img src="${source.img.src}" id="extractImage_${source.id}" style="image-rendering:pixelated;cursor:crosshair;user-drag:none;user-select:none;-webkit-user-drag:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;">
-          <div class="extract-frames" id="extractFrames_${source.id}" style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;"></div>
-          <div class="extract-selection" id="extractSelection_${source.id}" style="position:absolute;top:0;left:0;right:0;bottom:0;display:none;pointer-events:none;"></div>
+          <div class="extract-frames" id="extractFrames_${source.id}" style="position:absolute;top:0;left:0;pointer-events:none;"></div>
+          <div class="extract-selection" id="extractSelection_${source.id}" style="position:absolute;top:0;left:0;display:none;pointer-events:none;"></div>
         </div>
-        <div style="position:absolute;bottom:8px;right:8px;display:flex;gap:2px;background:var(--bg-panel);border:1px solid var(--border);border-radius:4px;padding:2px;z-index:10;">
-          <button class="btn btn-sm" onclick="extractZoomOut('${source.id}')" style="padding:2px 6px;font-size:10px;">−</button>
-          <span id="extractZoomVal_${source.id}" style="font-size:10px;color:var(--text-dim);padding:2px 6px;min-width:40px;text-align:center;">100%</span>
-          <button class="btn btn-sm" onclick="extractZoomIn('${source.id}')" style="padding:2px 6px;font-size:10px;">+</button>
-          <button class="btn btn-sm" onclick="extractZoomFit('${source.id}')" style="padding:2px 6px;font-size:10px;">适应</button>
+        <div style="position:absolute;bottom:12px;right:12px;display:flex;gap:4px;background:var(--bg-panel);border:1px solid var(--border);border-radius:6px;padding:4px;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+          <button class="btn btn-sm" onclick="extractZoomOut('${source.id}')" style="padding:4px 8px;font-size:12px;">−</button>
+          <span id="extractZoomVal_${source.id}" style="font-size:12px;color:var(--text);padding:4px 8px;min-width:50px;text-align:center;background:var(--bg-surface);border-radius:4px;">100%</span>
+          <button class="btn btn-sm" onclick="extractZoomIn('${source.id}')" style="padding:4px 8px;font-size:12px;">+</button>
+          <button class="btn btn-sm" onclick="extractZoomFit('${source.id}')" style="padding:4px 8px;font-size:12px;">适应</button>
         </div>
       </div>
       <div style="display:flex;justify-content:center;gap:4px;margin-bottom:8px;">
@@ -328,18 +332,18 @@ function extractZoomFit(sourceId) {
   const container = document.getElementById(`extractImageContainer_${sourceId}`);
   
   if (img && container) {
-    // Account for padding
+    // Account for padding and controls
     const padding = 40;
     const containerWidth = container.clientWidth - padding;
     const containerHeight = container.clientHeight - padding;
     const imgWidth = img.naturalWidth;
     const imgHeight = img.naturalHeight;
     
+    // Calculate zoom ratio to fit within container
     const widthRatio = containerWidth / imgWidth;
     const heightRatio = containerHeight / imgHeight;
-    // Increase max zoom and make it more user-friendly
+    // Limit maximum zoom to 3x and minimum to 0.1x
     const fitZoom = Math.min(widthRatio, heightRatio, 3);
-    // Ensure minimum zoom of 0.1
     const finalZoom = Math.max(fitZoom, 0.1);
     
     extractZoomLevels[sourceId] = finalZoom;
@@ -357,40 +361,49 @@ function updateExtractZoom(sourceId, zoom) {
   const framesContainer = document.getElementById(`extractFrames_${sourceId}`);
   const selectionContainer = document.getElementById(`extractSelection_${sourceId}`);
   const zoomVal = document.getElementById(`extractZoomVal_${sourceId}`);
-  const wrapper = document.getElementById(`extractImageWrapper_${sourceId}`);
+  const container = document.getElementById(`extractImageContainer_${sourceId}`);
   
   if (img) {
-    img.style.transform = `scale(${zoom})`;
-    img.style.transformOrigin = 'top left';
-    img.style.width = `${img.naturalWidth}px`;
-    img.style.height = `${img.naturalHeight}px`;
+    // 关键修复：直接调整图片尺寸，而不是使用transform
+    // 这样可以确保图片不会撑大容器
+    const newWidth = img.naturalWidth * zoom;
+    const newHeight = img.naturalHeight * zoom;
+    img.style.width = `${newWidth}px`;
+    img.style.height = `${newHeight}px`;
+    img.style.transform = 'none';
   }
   
-  if (framesContainer) {
-    framesContainer.style.transform = `scale(${zoom})`;
-    framesContainer.style.transformOrigin = 'top left';
-    framesContainer.style.width = `${img ? img.naturalWidth : 0}px`;
-    framesContainer.style.height = `${img ? img.naturalHeight : 0}px`;
+  if (framesContainer && img) {
+    // 帧容器也使用相同的尺寸
+    const newWidth = img.naturalWidth * zoom;
+    const newHeight = img.naturalHeight * zoom;
+    framesContainer.style.width = `${newWidth}px`;
+    framesContainer.style.height = `${newHeight}px`;
+    framesContainer.style.transform = 'none';
   }
   
-  if (selectionContainer) {
-    selectionContainer.style.transform = `scale(${zoom})`;
-    selectionContainer.style.transformOrigin = 'top left';
-    selectionContainer.style.width = `${img ? img.naturalWidth : 0}px`;
-    selectionContainer.style.height = `${img ? img.naturalHeight : 0}px`;
+  if (selectionContainer && img) {
+    // 选择容器也使用相同的尺寸
+    const newWidth = img.naturalWidth * zoom;
+    const newHeight = img.naturalHeight * zoom;
+    selectionContainer.style.width = `${newWidth}px`;
+    selectionContainer.style.height = `${newHeight}px`;
+    selectionContainer.style.transform = 'none';
   }
   
-  // Update wrapper size to match scaled image
-  if (wrapper && img) {
-    wrapper.style.width = `${img.naturalWidth * zoom}px`;
-    wrapper.style.height = `${img.naturalHeight * zoom}px`;
+  if (container) {
+    // 确保容器有固定的高度，防止被图片撑大
+    container.style.height = '400px';
+    container.style.overflow = 'auto';
+    container.style.position = 'relative';
   }
   
   if (zoomVal) {
+    // 更新缩放比例显示
     zoomVal.textContent = `${Math.round(zoom * 100)}%`;
   }
   
-  // Re-render frames to update their positions and sizes
+  // 重新渲染帧以更新它们的位置和大小
   renderExtractFrames(sourceId);
 }
 
@@ -437,13 +450,17 @@ function startManualExtract(e, sourceId) {
   const rect = img.getBoundingClientRect();
   const zoom = extractZoomLevels[sourceId] || 1;
   
-  // Calculate actual image position considering zoom
+  // 获取鼠标在图片上的相对位置
+  const relativeX = e.clientX - rect.left;
+  const relativeY = e.clientY - rect.top;
+  
+  // 转换为原始图片尺寸的坐标
   manualExtractState = {
     sourceId,
-    startX: (e.clientX - rect.left) / zoom,
-    startY: (e.clientY - rect.top) / zoom,
-    currentX: (e.clientX - rect.left) / zoom,
-    currentY: (e.clientY - rect.top) / zoom
+    startX: relativeX / zoom,
+    startY: relativeY / zoom,
+    currentX: relativeX / zoom,
+    currentY: relativeY / zoom
   };
   
   document.addEventListener('mousemove', updateManualExtract);
@@ -460,9 +477,13 @@ function updateManualExtract(e) {
   const rect = img.getBoundingClientRect();
   const zoom = extractZoomLevels[manualExtractState.sourceId] || 1;
   
-  // Calculate actual image position considering zoom
-  manualExtractState.currentX = (e.clientX - rect.left) / zoom;
-  manualExtractState.currentY = (e.clientY - rect.top) / zoom;
+  // 获取鼠标在图片上的相对位置
+  const relativeX = e.clientX - rect.left;
+  const relativeY = e.clientY - rect.top;
+  
+  // 转换为原始图片尺寸的坐标
+  manualExtractState.currentX = relativeX / zoom;
+  manualExtractState.currentY = relativeY / zoom;
   
   renderManualExtractSelection();
 }
@@ -473,6 +494,7 @@ function finishManualExtract(e) {
   const source = extractSources.find(s => s.id === manualExtractState.sourceId);
   if (!source) return;
   
+  // 已经是原始图片尺寸的坐标，不需要再除以zoom
   let x = Math.min(manualExtractState.startX, manualExtractState.currentX);
   let y = Math.min(manualExtractState.startY, manualExtractState.currentY);
   let w = Math.abs(manualExtractState.currentX - manualExtractState.startX);
@@ -560,16 +582,19 @@ function renderManualExtractSelection() {
   const img = document.getElementById(`extractImage_${manualExtractState.sourceId}`);
   const zoom = extractZoomLevels[manualExtractState.sourceId] || 1;
   
-  let x = Math.min(manualExtractState.startX, manualExtractState.currentX);
-  let y = Math.min(manualExtractState.startY, manualExtractState.currentY);
-  let w = Math.abs(manualExtractState.currentX - manualExtractState.startX);
-  let h = Math.abs(manualExtractState.currentY - manualExtractState.startY);
+  // 转换为显示尺寸的坐标
+  let x = Math.min(manualExtractState.startX, manualExtractState.currentX) * zoom;
+  let y = Math.min(manualExtractState.startY, manualExtractState.currentY) * zoom;
+  let w = Math.abs(manualExtractState.currentX - manualExtractState.startX) * zoom;
+  let h = Math.abs(manualExtractState.currentY - manualExtractState.startY) * zoom;
   
-  // Apply size constraint to preview
-  const con = applyExtractSizeConstraint(x, y, w, h, manualExtractState.sourceId);
-  w = con.w;
-  h = con.h;
-  y = con.y;
+  // Apply size constraint to preview (使用原始尺寸)
+  const rawX = Math.min(manualExtractState.startX, manualExtractState.currentX);
+  const rawY = Math.min(manualExtractState.startY, manualExtractState.currentY);
+  const rawW = Math.abs(manualExtractState.currentX - manualExtractState.startX);
+  const rawH = Math.abs(manualExtractState.currentY - manualExtractState.startY);
+  
+  const con = applyExtractSizeConstraint(rawX, rawY, rawW, rawH, manualExtractState.sourceId);
   
   const selection = document.getElementById(`extractSelection_${manualExtractState.sourceId}`);
   if (selection) {
@@ -595,7 +620,7 @@ function renderManualExtractSelection() {
         font-size:10px;
         border-radius:2px;
         pointer-events:none;
-      ">${Math.round(w)}×${Math.round(h)}</div>
+      ">${Math.round(rawW)}×${Math.round(rawH)}</div>
     `;
   }
 }
@@ -607,6 +632,8 @@ function renderExtractFrames(sourceId) {
   const framesContainer = document.getElementById(`extractFrames_${sourceId}`);
   if (!framesContainer) return;
   
+  const zoom = extractZoomLevels[sourceId] || 1;
+  
   framesContainer.innerHTML = '';
   
   source.frames.forEach((frame, index) => {
@@ -614,10 +641,10 @@ function renderExtractFrames(sourceId) {
     frameElement.className = 'extract-frame';
     frameElement.style.cssText = `
       position:absolute;
-      left:${frame.x}px;
-      top:${frame.y}px;
-      width:${frame.w}px;
-      height:${frame.h}px;
+      left:${frame.x * zoom}px;
+      top:${frame.y * zoom}px;
+      width:${frame.w * zoom}px;
+      height:${frame.h * zoom}px;
       border:2px solid ${frame.selected ? 'var(--accent)' : 'var(--border)'};
       background:${frame.selected ? 'rgba(137,180,250,0.2)' : 'rgba(255,255,255,0.1)'};
       cursor:pointer;
@@ -684,9 +711,6 @@ function renderExtractFrames(sourceId) {
   });
   
   // Draw reference lines
-  const img = document.getElementById(`extractImage_${sourceId}`);
-  const scaleX = img.clientWidth / img.naturalWidth;
-  const scaleY = img.clientHeight / img.naturalHeight;
   
   // Draw ground reference line in "lock bottom" mode
   if (document.getElementById(`extractLockBottom_${sourceId}`)?.checked && extractLockBottom > 0) {
@@ -694,7 +718,7 @@ function renderExtractFrames(sourceId) {
     line.style.cssText = `
       position:absolute;
       left:0;
-      top:${extractLockBottom}px;
+      top:${extractLockBottom * zoom}px;
       width:100%;
       height:0;
       border-top:2px dashed rgba(243,139,168,0.7);
@@ -708,7 +732,7 @@ function renderExtractFrames(sourceId) {
     lbl.style.cssText = `
       position:absolute;
       left:4px;
-      top:${extractLockBottom + 2}px;
+      top:${extractLockBottom * zoom + 2}px;
       font-size:10px;
       color:rgba(243,139,168,0.9);
       pointer-events:none;
@@ -724,7 +748,7 @@ function renderExtractFrames(sourceId) {
     line.style.cssText = `
       position:absolute;
       left:0;
-      top:${extractLockTop}px;
+      top:${extractLockTop * zoom}px;
       width:100%;
       height:0;
       border-top:2px dashed rgba(100,200,255,0.7);
@@ -738,7 +762,7 @@ function renderExtractFrames(sourceId) {
     lbl.style.cssText = `
       position:absolute;
       left:4px;
-      top:${extractLockTop - 14}px;
+      top:${extractLockTop * zoom - 14}px;
       font-size:10px;
       color:rgba(100,200,255,0.9);
       pointer-events:none;

@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SpriteForge - 精灵表编辑器</title>
 <link rel="stylesheet" href="css/main.css">
+<script type="module">
+  // 引入jSquash编解码器
+  import { decode as decodeJpeg, encode as encodeJpeg } from "https://esm.sh/@jsquash/jpeg";
+  import { decode as decodePng, encode as encodePng } from "https://esm.sh/@jsquash/png";
+  import { encode as encodeWebp } from "https://esm.sh/@jsquash/webp";
+  import { optimise as optimisePng } from "https://esm.sh/@jsquash/oxipng";
+  
+  // 全局暴露
+  window.imageCodecs = {
+    decodeJpeg,
+    encodeJpeg,
+    decodePng,
+    encodePng,
+    encodeWebp,
+    optimisePng
+  };
+</script>
 </head>
 <body>
 <!-- 功能选择初始页面 -->
@@ -27,6 +44,12 @@
         <div class="feature-icon">✏️</div>
         <h3>精灵编辑</h3>
         <p>手动编辑和管理精灵帧，支持背景消除</p>
+      </div>
+      
+      <div class="feature-card" onclick="startImageCompress()">
+        <div class="feature-icon">🗜️</div>
+        <h3>图像压缩</h3>
+        <p>无损压缩图像，减小文件大小而不损失质量</p>
       </div>
     </div>
     
@@ -278,6 +301,67 @@
           <div id="targetFrames" class="extract-target-frames"></div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Image Compression Page -->
+<div id="compressPage" class="compress-page" style="display:none;">
+  <div class="compress-header-new">
+    <button class="btn btn-home" onclick="backToWelcome()">🏠 首页</button>
+    <div class="compress-title-new">
+      <h1>🗜️ 图像压缩</h1>
+      <p>推荐使用以下专业压缩工具</p>
+    </div>
+  </div>
+  <div class="compress-body">
+    <div class="compress-main">
+      <div class="compress-tools-section">
+        <div class="compress-tools-grid-new">
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">🎯</div>
+            <h4>Tinify</h4>
+            <p>专业的图像压缩服务，提供高质量的压缩效果，支持批量处理</p>
+            <a href="https://tinify.cn/" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+          
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">🖼️</div>
+            <h4>Squoosh</h4>
+            <p>Google开发的开源图像压缩工具，支持多种格式，实时预览效果</p>
+            <a href="https://squoosh.app/" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+          
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">⚡</div>
+            <h4>CompressJPEG</h4>
+            <p>专注于JPEG格式的压缩工具，简单易用，压缩率高</p>
+            <a href="https://compressjpeg.com/" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+          
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">📦</div>
+            <h4>Optimizilla</h4>
+            <p>支持批量压缩，同时优化JPEG和PNG图像，操作简单</p>
+            <a href="https://imagecompressor.com/" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+        </div>
+      </div>
+      
+      <div class="compress-section">
+        <h3>使用说明</h3>
+        <div class="compress-guide">
+          <ol>
+            <li>点击上方链接访问相应的压缩网站</li>
+            <li>上传您需要压缩的图像文件</li>
+            <li>选择合适的压缩设置</li>
+            <li>下载压缩后的图像</li>
+            <li>将压缩后的图像导入到SpriteForge中使用</li>
+          </ol>
+        </div>
+      </div>
+      
+
     </div>
   </div>
 </div>

@@ -3549,3 +3549,27 @@ addImageToStore = function(name, img) {
     triggerAutoSave();
   }, 100);
 };
+
+// ===== Image Compression =====
+function startImageCompress() {
+  // 隐藏welcomePage，显示compressPage
+  document.getElementById('welcomePage').style.display = 'none';
+  document.getElementById('editPage').style.display = 'none';
+  document.getElementById('extractPage').style.display = 'none';
+  const compressPage = document.getElementById('compressPage');
+  compressPage.style.display = 'flex';
+  compressPage.classList.add('show');
+}
+
+// 更新backToWelcome函数以包含compressPage
+try {
+  const originalBackToWelcome = backToWelcome;
+  backToWelcome = function() {
+    originalBackToWelcome.apply(this, arguments);
+    const compressPage = document.getElementById('compressPage');
+    compressPage.style.display = 'none';
+    compressPage.classList.remove('show');
+  };
+} catch (e) {
+  console.error('更新backToWelcome函数失败:', e);
+}
