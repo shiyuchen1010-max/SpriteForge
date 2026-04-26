@@ -30,7 +30,7 @@
     <div class="welcome-header">
       <div class="welcome-logo">🎨</div>
       <h1>SpriteForge</h1>
-      <p class="welcome-subtitle">专业精灵表编辑工具</p>
+      <p class="welcome-subtitle">在线精灵表编辑工具</p>
     </div>
     
     <div class="feature-grid">
@@ -50,6 +50,12 @@
         <div class="feature-icon">🗜️</div>
         <h3>图像压缩</h3>
         <p>无损压缩图像，减小文件大小而不损失质量</p>
+      </div>
+      
+      <div class="feature-card" onclick="startImageSplit()">
+        <div class="feature-icon">🖼️</div>
+        <h3>图片处理</h3>
+        <p>使用专业工具处理图片，支持分割、编辑等多种功能</p>
       </div>
     </div>
     
@@ -366,6 +372,81 @@
   </div>
 </div>
 
+<!-- Image Processing Page -->
+<div id="splitPage" class="compress-page" style="display:none;">
+  <div class="compress-header-new">
+    <button class="btn btn-home" onclick="backToWelcome()">🏠 首页</button>
+    <div class="compress-title-new">
+          <h1>🖼️ 图片处理</h1>
+          <p>推荐使用专业的图片处理工具</p>
+        </div>
+  </div>
+  <div class="compress-body">
+    <div class="compress-main">
+      <div class="compress-tools-section">
+        <div class="compress-tools-grid-new">
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">✂️</div>
+            <h4>ImgSplit</h4>
+            <p>专业的图片分割工具，支持自由分割和拖拽调整</p>
+            <a href="https://imgsplit.com" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+          
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">🎨</div>
+            <h4>Photopea</h4>
+            <p>在线Photoshop替代工具，支持多种图像编辑功能</p>
+            <a href="https://www.photopea.com" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+          
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">📸</div>
+            <h4>Pixlr</h4>
+            <p>在线图像编辑工具，支持图层、滤镜等高级功能</p>
+            <a href="https://pixlr.com" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+          
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">🖼️</div>
+            <h4>Canva</h4>
+            <p>在线设计工具，支持图像编辑、海报制作等多种功能</p>
+            <a href="https://www.canva.com" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+          
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">🎯</div>
+            <h4>Remove.bg</h4>
+            <p>智能背景移除工具，一键去除图片背景</p>
+            <a href="https://www.remove.bg" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+          
+          <div class="compress-tool-card">
+            <div class="compress-tool-icon">🌀</div>
+            <h4>Sumopaint</h4>
+            <p>在线图像编辑器，提供专业的绘画和编辑功能</p>
+            <a href="https://sumopaint.com" target="_blank" class="btn btn-accent">访问网站</a>
+          </div>
+        </div>
+      </div>
+      
+      <div class="compress-section">
+        <h3>使用说明</h3>
+        <div class="compress-guide">
+          <ol>
+            <li>点击上方链接访问相应的在线图片处理工具</li>
+            <li>根据工具的使用说明上传和处理图片</li>
+            <li>完成处理后下载处理后的图片</li>
+            <li>将处理后的图片导入到SpriteForge中使用</li>
+          </ol>
+          <p style="font-size:12px;color:var(--text-dim);margin-top:8px;">
+            💡 提示：这些在线工具提供了专业的图片处理功能，可以帮助您更好地准备游戏素材
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Optimize Modal -->
 <div class="modal-bg" id="optModal">
   <div class="modal" style="width:720px;">
@@ -673,6 +754,7 @@
 <script src="js/auto-save.js"></script>
 <script src="js/app.js"></script>
 <script src="js/frame-extract.js"></script>
+
 <script src="test.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </body>

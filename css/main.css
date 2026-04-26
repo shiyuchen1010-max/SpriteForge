@@ -935,3 +935,208 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans
 #compressPage.show {
   display: flex;
 }
+
+/* Split Page in page transitions */
+#splitPage {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-canvas);
+  overflow: hidden;
+  display: none;
+  z-index: 15;
+  flex-direction: column;
+}
+
+#splitPage.show {
+  display: flex;
+}
+
+/* Split Page Styles */
+.compress-drop-area {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: var(--bg-surface);
+}
+
+.compress-drop-area:hover {
+  border-color: var(--accent);
+  background: rgba(137, 180, 250, 0.05);
+}
+
+.compress-drop-area.drag-over {
+  border-color: var(--accent);
+  background: rgba(137, 180, 250, 0.1);
+  transform: translateY(-2px);
+}
+
+.drop-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.drop-icon {
+  font-size: 48px;
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+.compress-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.split-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+.split-container canvas {
+  max-width: 100%;
+  max-height: 600px;
+  border-radius: var(--radius-sm);
+}
+
+/* Split Instructions Styles */
+.split-instructions-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-top: 8px;
+}
+
+.split-instructions h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.split-instructions ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style-type: none;
+}
+
+.split-instructions li {
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  position: relative;
+  padding-left: 18px;
+}
+
+.split-instructions li:before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+.split-instructions strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Split Canvas Enhancements */
+.split-container {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  min-height: 500px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.split-container canvas {
+  max-width: 100%;
+  max-height: 600px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Split Controls Enhancement */
+.compress-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.compress-controls .btn {
+  flex: 1;
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+/* Line Handle Styles */
+.line-handle {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.line-handle:hover {
+  transform: scale(1.2);
+}
+
+/* Empty State Styles */
+.split-container .empty {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 40px 20px;
+}
+
+@media (max-width: 767px) {
+  .compress-controls {
+    flex-direction: column;
+  }
+  
+  .compress-controls .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .split-container {
+    min-height: 350px;
+    padding: 12px;
+  }
+  
+  .compress-drop-area {
+    padding: 32px 16px;
+  }
+  
+  .drop-icon {
+    font-size: 36px;
+  }
+  
+  .split-instructions li {
+    font-size: 12px;
+  }
+}

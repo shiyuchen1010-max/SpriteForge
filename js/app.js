@@ -7,6 +7,8 @@ function backToWelcome() {
   document.getElementById('welcomePage').style.display = 'flex';
   document.getElementById('editPage').style.display = 'none';
   document.getElementById('extractPage').style.display = 'none';
+  document.getElementById('compressPage').style.display = 'none';
+  document.getElementById('splitPage').style.display = 'none';
 }
 
 function startFrameExtract() {
@@ -14,6 +16,8 @@ function startFrameExtract() {
   document.getElementById('welcomePage').style.display = 'none';
   document.getElementById('editPage').style.display = 'none';
   document.getElementById('extractPage').style.display = 'flex';
+  document.getElementById('compressPage').style.display = 'none';
+  document.getElementById('splitPage').style.display = 'none';
   // 初始化帧提取界面
   initExtractPage();
 }
@@ -23,6 +27,26 @@ function startSpriteEdit() {
   document.getElementById('welcomePage').style.display = 'none';
   document.getElementById('editPage').style.display = 'flex';
   document.getElementById('extractPage').style.display = 'none';
+  document.getElementById('compressPage').style.display = 'none';
+  document.getElementById('splitPage').style.display = 'none';
+}
+
+function startImageCompress() {
+  // 隐藏welcomePage，显示compressPage
+  document.getElementById('welcomePage').style.display = 'none';
+  document.getElementById('editPage').style.display = 'none';
+  document.getElementById('extractPage').style.display = 'none';
+  document.getElementById('compressPage').style.display = 'flex';
+  document.getElementById('splitPage').style.display = 'none';
+}
+
+function startImageSplit() {
+  // 隐藏welcomePage，显示splitPage
+  document.getElementById('welcomePage').style.display = 'none';
+  document.getElementById('editPage').style.display = 'none';
+  document.getElementById('extractPage').style.display = 'none';
+  document.getElementById('compressPage').style.display = 'none';
+  document.getElementById('splitPage').style.display = 'flex';
 }
 
 function initExtractPage() {
